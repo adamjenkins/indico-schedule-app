@@ -1,0 +1,1428 @@
+/*
+ * One stylesheet. The app has five screens and a shared vocabulary of about a
+ * dozen elements, so splitting it per component would cost more in navigation
+ * than it saves in size.
+ *
+ * Written mobile-first and capped at a readable measure on larger screens —
+ * the app is meant for a phone, but people will open it on a laptop and it
+ * should not stretch a talk title across 1400 pixels.
+ */
+
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --surface-2: #eef1f4;
+  --ink: #16191d;
+  --ink-2: #4a545f;
+  --muted: #6b7480;
+  --rule: #dfe4ea;
+  --accent: #1f5c96;
+  --accent-ink: #ffffff;
+  --accent-soft: #e8f0f9;
+  --star: #d99a2b;
+  --danger: #b8453a;
+  --danger-soft: #fdeceb;
+  --ok: #3f7a48;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --tap: 44px;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14181d;
+    --surface: #1c2127;
+    --surface-2: #252b33;
+    --ink: #e9edf1;
+    --ink-2: #b3bcc6;
+    --muted: #8a939e;
+    --rule: #2e353d;
+    --accent: #6ea8e8;
+    --accent-ink: #10151a;
+    --accent-soft: #22303f;
+    --star: #e0b054;
+    --danger: #e0796d;
+    --danger-soft: #2e1f1e;
+    --ok: #6cbb79;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overscroll-behavior-y: none;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  /* Long-pressing a button should not offer to copy its label or pop a
+     callout — that is the clearest single tell that something is a web page.
+     Actual content (titles, abstracts) opts back in below. */
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.talk .title,
+.talk .who,
+.detail,
+.abstract,
+.facts {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+a {
+  color: var(--accent);
+}
+
+/* --- app frame ---------------------------------------------------------- */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  max-width: 720px;
+  margin: 0 auto;
+  background: var(--bg);
+}
+
+.appbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(var(--safe-top) + 10px) 14px 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--rule);
+}
+
+.appbar h1 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+.appbar h1 small {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: var(--tap);
+  min-height: var(--tap);
+  margin: -8px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+}
+
+.iconbtn svg {
+  flex: 0 0 auto;
+}
+
+.iconbtn:active {
+  background: var(--surface-2);
+}
+
+.main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 14px calc(16px + var(--safe-bottom));
+}
+
+/* --- bottom navigation --------------------------------------------------- */
+
+.tabbar {
+  display: flex;
+  background: var(--surface);
+  border-top: 1px solid var(--rule);
+  padding-bottom: var(--safe-bottom);
+}
+
+.tabbar button {
+  flex: 1;
+  min-height: var(--tap);
+  padding: 8px 2px 10px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.tabbar button .glyph {
+  display: inline-flex;
+  line-height: 0;
+}
+
+.tabbar button:disabled {
+  opacity: 0.35;
+}
+
+/* Colour alone marks the current tab. An underline rule above the icon reads as
+   a stray progress bar at this size, and the filled star already carries the
+   state for the tab where it matters most. */
+.tabbar button[aria-current='page'] {
+  color: var(--accent);
+}
+
+/* --- day tabs ------------------------------------------------------------ */
+
+.daytabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 8px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--rule);
+  scrollbar-width: none;
+}
+
+.daytabs::-webkit-scrollbar {
+  display: none;
+}
+
+.daytabs button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 6px 14px;
+  border: 1px solid transparent;
+  border-radius: 20px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.daytabs button[aria-current='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* --- filter chips -------------------------------------------------------- */
+
+.chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.chip {
+  min-height: 32px;
+  padding: 5px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chip.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chip .x {
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+/* --- cards --------------------------------------------------------------- */
+
+.card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.card h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.card .meta {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.card .status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+  flex: 0 0 auto;
+}
+
+.dot.stale {
+  background: var(--star);
+}
+
+.dot.off {
+  background: var(--muted);
+}
+
+.dot.bad {
+  background: var(--danger);
+}
+
+/* --- agenda list --------------------------------------------------------- */
+
+.timehead {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin: 14px 0 8px;
+  padding: 4px 0;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.timehead:first-child {
+  margin-top: 0;
+}
+
+.talk {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 11px 10px 11px 12px;
+  margin-bottom: 8px;
+  color: inherit;
+}
+
+.talk.dim {
+  opacity: 0.45;
+}
+
+.talk .body {
+  flex: 1;
+  min-width: 0;
+}
+
+.talk .title {
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.talk .who {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.talk .tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.pill.room {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.starbtn {
+  flex: 0 0 auto;
+  min-width: var(--tap);
+  min-height: var(--tap);
+  margin: -10px -6px -10px 0;
+  border: 0;
+  background: none;
+  color: var(--rule);
+  font-size: 21px;
+  line-height: 1;
+}
+
+.starbtn.on {
+  color: var(--star);
+}
+
+.nowline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.nowline .bar {
+  flex: 1;
+  height: 2px;
+  background: var(--danger);
+  border-radius: 2px;
+}
+
+.nowline .label {
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+}
+
+/* --- banners ------------------------------------------------------------- */
+
+.banner {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.banner.warn {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.banner.bad {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+
+.banner button {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  padding: 0;
+}
+
+/* --- forms and buttons --------------------------------------------------- */
+
+.field {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 11px 13px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.field::placeholder {
+  color: var(--muted);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--tap);
+  padding: 11px 18px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.btn[disabled] {
+  opacity: 0.5;
+}
+
+.btn.ghost {
+  background: var(--surface);
+  border-color: var(--rule);
+  color: var(--ink);
+}
+
+.btn.block {
+  width: 100%;
+}
+
+.btn.danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+/* --- bottom sheet -------------------------------------------------------- */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(12, 18, 26, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: scrim-in 0.2s ease both;
+}
+
+/* Rising into place rather than appearing. A modal that simply exists is the
+   other big tell that something is a web page. */
+.sheet {
+  animation: sheet-up 0.28s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+@keyframes scrim-in {
+  from {
+    background: rgba(12, 18, 26, 0);
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+.sheet {
+  width: 100%;
+  max-width: 720px;
+  max-height: 85dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-radius: 16px 16px 0 0;
+  padding: 8px 14px calc(14px + var(--safe-bottom));
+}
+
+.sheet .grip {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--rule);
+  margin: 2px auto 10px;
+  flex: 0 0 auto;
+}
+
+.sheet header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  flex: 0 0 auto;
+}
+
+.sheet header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.sheet .scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -14px;
+  padding: 0 14px;
+}
+
+.sheet footer {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+  margin-top: 8px;
+}
+
+.grouphead {
+  margin: 14px 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 8px 0;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: none;
+  text-align: left;
+  font-size: 15px;
+}
+
+.option .count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.check {
+  width: 21px;
+  height: 21px;
+  flex: 0 0 auto;
+  border: 1.5px solid var(--muted);
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: transparent;
+}
+
+.check.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* --- talk detail --------------------------------------------------------- */
+
+.detail h1 {
+  margin: 4px 0 8px;
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: -0.3px;
+}
+
+.detail .speakers {
+  color: var(--ink-2);
+  font-size: 15px;
+}
+
+.facts {
+  margin: 16px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.facts div {
+  display: flex;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 15px;
+}
+
+.facts dt {
+  width: 78px;
+  flex: 0 0 auto;
+  color: var(--muted);
+  margin: 0;
+}
+
+.facts dd {
+  margin: 0;
+}
+
+.detail .speakers {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.speaker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 15px;
+  color: var(--ink-2);
+}
+
+.speaker .affiliation {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.abstract {
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.abstract h2 {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: var(--muted);
+  margin: 0 0 6px;
+}
+
+.abstract p {
+  margin: 0 0 10px;
+}
+
+.abstract p:last-child {
+  margin-bottom: 0;
+}
+
+.abstract ul,
+.abstract ol {
+  margin: 0 0 10px;
+  padding-left: 22px;
+}
+
+.abstract li {
+  margin-bottom: 4px;
+}
+
+.abstract blockquote {
+  margin: 0 0 10px;
+  padding-left: 12px;
+  border-left: 3px solid var(--rule);
+  color: var(--muted);
+}
+
+.abstract code,
+.abstract pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  background: var(--surface-2);
+  border-radius: 4px;
+}
+
+.abstract code {
+  padding: 1px 4px;
+}
+
+.abstract pre {
+  padding: 10px;
+  overflow-x: auto;
+}
+
+.abstract-missing {
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+/* --- event picker --------------------------------------------------------- */
+
+.crumbs {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.crumbs button {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.crumbs strong {
+  color: var(--ink);
+}
+
+.folder {
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  width: 21px;
+  flex: 0 0 auto;
+  text-align: center;
+}
+
+.event-option {
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 0;
+}
+
+.event-option[disabled] {
+  opacity: 0.55;
+}
+
+.event-option-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.event-option-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.event-option-meta {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.event-option .count {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-top: 2px;
+}
+
+.event-option[disabled] .count {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* --- search -------------------------------------------------------------- */
+
+.searchbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.resultcount {
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+mark {
+  background: color-mix(in srgb, var(--star) 40%, transparent);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+/* --- empty and error states ---------------------------------------------- */
+
+.state {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--muted);
+}
+
+.state .glyph {
+  font-size: 34px;
+  opacity: 0.5;
+}
+
+.state h2 {
+  margin: 14px 0 6px;
+  font-size: 17px;
+  color: var(--ink);
+}
+
+.state p {
+  margin: 0 auto 16px;
+  max-width: 34ch;
+  font-size: 14px;
+}
+
+.spinner {
+  width: 22px;
+  height: 22px;
+  margin: 32px auto;
+  border: 2.5px solid var(--rule);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2.4s;
+  }
+
+  /* Keep the feedback, drop the movement: presses still respond through colour,
+     screens and sheets still appear, but nothing slides or scales. */
+  .screen,
+  .screen.push,
+  .screen.pop,
+  .sheet,
+  .scrim {
+    animation: none;
+  }
+
+  .talk:active,
+  .card:active,
+  .option:active,
+  .ev-card:active,
+  .btn:active,
+  .chip:active,
+  .daytabs button:active,
+  .starbtn:active,
+  .tabbar button:active .glyph {
+    transform: none;
+  }
+
+  .ptr-content {
+    transition: none;
+  }
+}
+
+/* --- press feedback ------------------------------------------------------ */
+
+/* Immediate, physical response to a tap. Web apps usually skip this and it is
+   most of why they feel dead: a native control acknowledges the finger before
+   anything else happens. 90ms in, slower out. */
+.talk,
+.card,
+.option,
+.chip,
+.btn,
+.daytabs button,
+.ev-card,
+.tabbar button {
+  transition:
+    transform 0.18s cubic-bezier(0.2, 0, 0.2, 1),
+    background-color 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.talk:active,
+.card:active,
+.option:active,
+.ev-card:active {
+  transform: scale(0.982);
+  background: var(--surface-2);
+  transition-duration: 0.09s;
+}
+
+.btn:active,
+.chip:active,
+.daytabs button:active {
+  transform: scale(0.96);
+  transition-duration: 0.09s;
+}
+
+.tabbar button:active .glyph {
+  transform: scale(0.88);
+}
+
+.tabbar button .glyph {
+  transition: transform 0.12s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.starbtn {
+  transition: transform 0.16s cubic-bezier(0.34, 1.6, 0.64, 1), color 0.16s ease;
+}
+
+.starbtn:active {
+  transform: scale(1.35);
+}
+
+/* --- screen transitions --------------------------------------------------- */
+
+.screen {
+  animation: screen-fade 0.16s ease both;
+}
+
+.screen.push {
+  animation: screen-push 0.24s cubic-bezier(0.2, 0, 0.2, 1) both;
+}
+
+.screen.pop {
+  animation: screen-pop 0.22s cubic-bezier(0.2, 0, 0.2, 1) both;
+}
+
+@keyframes screen-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes screen-push {
+  from {
+    opacity: 0.4;
+    transform: translateX(22px);
+  }
+}
+
+@keyframes screen-pop {
+  from {
+    opacity: 0.4;
+    transform: translateX(-16px);
+  }
+}
+
+/* --- pull to refresh ------------------------------------------------------ */
+
+.ptr {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  transition: opacity 0.15s ease, height 0.2s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.ptr-spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--rule);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+}
+
+.ptr.busy .ptr-spinner {
+  animation: spin 0.8s linear infinite;
+}
+
+.ptr-content {
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* --- install card --------------------------------------------------------- */
+
+.install {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.install-warn {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
+.install-icon {
+  color: var(--accent);
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.install-body {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Only the card's own title is a block. Emphasised words inside the
+   instructions ("Add to Home Screen") must stay inline, or the sentence breaks
+   apart and leaves its punctuation stranded on the next line. */
+.install-body > strong {
+  display: block;
+  font-size: 15px;
+  margin-bottom: 3px;
+}
+
+.install-body p strong {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.install-warn .install-body strong {
+  color: var(--danger);
+}
+
+.install-body p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+.install-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.install-actions .btn {
+  min-height: 38px;
+  padding: 8px 16px;
+  font-size: 14px;
+}
+
+.inline-glyph {
+  vertical-align: -3px;
+  margin: 0 1px;
+}
+
+.settings-group {
+  margin-bottom: 22px;
+}
+
+.settings-group h2 {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 15px;
+}
+
+.kv span:last-child {
+  color: var(--muted);
+  text-align: right;
+}
+
+/* --- the unprompted install sheet ----------------------------------------- */
+
+.install-sheet {
+  text-align: center;
+  padding-bottom: calc(20px + var(--safe-bottom));
+}
+
+.install-sheet h2 {
+  margin: 12px 0 4px;
+  font-size: 20px;
+  letter-spacing: -0.2px;
+}
+
+.install-hero img {
+  border-radius: 14px;
+  box-shadow: 0 4px 14px rgba(20, 30, 45, 0.22);
+}
+
+.install-points {
+  list-style: none;
+  margin: 14px 0 4px;
+  padding: 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.install-points li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14.5px;
+  color: var(--ink-2);
+  margin: 0;
+}
+
+.install-points svg,
+.install-points .bullet-glyph {
+  color: var(--accent);
+  flex: 0 0 auto;
+  width: 22px;
+  text-align: center;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.install-steps {
+  text-align: left;
+  margin: 16px 0 0;
+  padding-left: 22px;
+  font-size: 14.5px;
+  color: var(--ink-2);
+}
+
+.install-steps li {
+  margin-bottom: 7px;
+}
+
+.install-sheet-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+/* The picker needs room to be a list rather than a peek: a sheet sized to two
+   or three results looks broken next to one showing a dozen. */
+.picker-sheet {
+  min-height: 70dvh;
+}
+
+/*
+ * The organisation's logo, lifted from Indico's own page header.
+ *
+ * `.on-dark` is applied when the artwork was measured as light (see
+ * `branding.ts`) -- Indico's stock header logo is solid white, and without a
+ * dark plate behind it there would appear to be no logo at all. The plate is a
+ * fixed dark colour rather than a token, because it exists to guarantee
+ * contrast with the image and so must not follow the colour scheme.
+ */
+.sitelogo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+
+.sitelogo.on-dark {
+  background: #23292f;
+  border-color: #23292f;
+}
+
+.sitelogo img {
+  max-width: 100%;
+  /* Height-capped rather than width-capped: logos vary wildly in aspect ratio,
+     and a tall one would otherwise take over the top of the screen. */
+  max-height: 44px;
+  width: auto;
+  object-fit: contain;
+}
+
+/* Progress while the picker works out which events have a schedule. */
+.probe-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 2px 2px;
+}
+
+/* --- Clashing talks ------------------------------------------------------
+ * A box around the talks that overlap each other, rather than a marker on each
+ * one. Two clashing talks can be several rows apart once rooms and speakers are
+ * on the cards; drawn as a group, the question "which two?" answers itself.
+ * The border is thin on purpose — this is a warning, not an error, and the
+ * talks inside it are still perfectly ordinary rows.
+ */
+.clash {
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  background: var(--danger-soft);
+  padding: 8px 8px 0;
+  margin-bottom: 8px;
+}
+
+.clash-head {
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 0 2px 7px;
+}
+
+/* The rows keep their own surface colour so the tinted box reads as a frame
+   around them rather than as a shaded state applied to each. */
+.clash .talk {
+  background: var(--surface);
+}
+
+.finished-toggle {
+  margin: 4px auto 0;
+}
+
+/* --- Sponsors ------------------------------------------------------------
+ * A courtesy block at the foot of the schedule. Sizes follow the plugin's
+ * rule — each tier's share is relative to the largest tier being shown — so
+ * the phone and the printed grid agree about which sponsors are bigger.
+ */
+.sponsors {
+  margin: 22px 0 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+}
+
+/* At the top the rule reads as a divider *under* the block rather than over it,
+   and the margins are tighter: this is sitting on the space the schedule came
+   for, so it should not take more of it than it has to. */
+.sponsors.sponsors-above {
+  margin: 0 0 14px;
+  padding-top: 0;
+  padding-bottom: 14px;
+  border-top: 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.sponsors-head {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.sponsor-tier {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 16px 18px;
+  margin-bottom: 16px;
+}
+
+.sponsor-tier:last-child {
+  margin-bottom: 0;
+}
+
+.sponsor {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  color: inherit;
+  text-decoration: none;
+  max-width: 100%;
+}
+
+/* The width is set inline from the tier's share, and the image fills it — so a
+   logo is a proportion of the block rather than a fixed number of pixels. */
+.sponsor-logo {
+  display: block;
+  min-width: 64px;
+}
+
+.sponsor-logo img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.sponsor-name {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.sponsor-tagline {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.sponsor-description {
+  font-size: 12px;
+  color: var(--ink-2);
+  text-align: left;
+}
+
+/* The event's own logo on its card in the library. Shown only when the
+   organisers set one — an absent logo leaves the card exactly as it was, rather
+   than reserving a space or standing in a placeholder. */
+.ev-logo {
+  margin-bottom: 8px;
+}
+
+.ev-logo img {
+  display: block;
+  max-height: 46px;
+  max-width: 60%;
+  width: auto;
+  height: auto;
+}

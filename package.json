@@ -1,0 +1,28 @@
+{
+  "name": "indico-schedule-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Installable mobile web app for viewing an Indico Block Schedule offline",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build && node scripts/build-precache.mjs",
+    "package": "npm run build && node scripts/package.mjs",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "icons": "python3 scripts/make-icons.py"
+  },
+  "dependencies": {
+    "idb": "^8.0.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  }
+}
