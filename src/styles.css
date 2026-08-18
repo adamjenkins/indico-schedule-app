@@ -1372,6 +1372,10 @@ mark {
   margin-bottom: 0;
 }
 
+/* `--sp-w` is the tier's share of the block, set inline per card. It belongs on
+   the card rather than on the logo: a percentage resolves against the parent's
+   content box, and the logo's parent is sized by its own contents, so a
+   percentage there measures itself. */
 .sponsor {
   display: flex;
   flex-direction: column;
@@ -1380,14 +1384,14 @@ mark {
   text-align: center;
   color: inherit;
   text-decoration: none;
-  max-width: 100%;
+  flex: 0 1 var(--sp-w);
+  max-width: min(var(--sp-w), 100%);
+  min-width: 64px;
 }
 
-/* The width is set inline from the tier's share, and the image fills it — so a
-   logo is a proportion of the block rather than a fixed number of pixels. */
 .sponsor-logo {
   display: block;
-  min-width: 64px;
+  width: 100%;
 }
 
 .sponsor-logo img {
@@ -1425,4 +1429,21 @@ mark {
   max-width: 60%;
   width: auto;
   height: auto;
+}
+
+/* A `list` template stacks its sponsors one per row, unless the tier is marked
+   to flow inline. The width still comes from the tier, so a stacked sponsor is
+   a left-aligned logo of the size the manager asked for, not a full-width one. */
+.sponsor-tier.stacked {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+/* Stacked, a card is still only as wide as its tier's share — it is a
+   left-aligned logo of the size the manager asked for, not a full-width one. */
+.sponsor-tier.stacked .sponsor {
+  flex: 0 0 auto;
+  align-items: flex-start;
+  text-align: left;
 }

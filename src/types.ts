@@ -164,6 +164,7 @@ export interface SponsorEntry {
     show_tagline: boolean;
     show_description: boolean;
     linked: boolean;
+    inline?: boolean;
   };
 }
 
@@ -171,8 +172,14 @@ export interface SponsorTier {
   id: number;
   name: string;
   size: number;
-  /** The share of the block's width this tier's logos take, already computed. */
+  /**
+   * The share of the block's width this tier's logos take, already computed
+   * from the tier's size and the template's "largest logo width" setting. Used
+   * as given — the arithmetic belongs to the plugin, not to every client.
+   */
   width_pct: number;
+  /** Lay this tier's sponsors side by side, wrapping, rather than one per row. */
+  inline?: boolean;
 }
 
 export interface SponsorsPayload {

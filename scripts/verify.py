@@ -632,7 +632,39 @@ def main() -> int:
             ordered = sorted(widths.values(), reverse=True)
             check('the tier size ratio survives into the app',
                   len(ordered) >= 2 and abs(ordered[1] / ordered[0] - 0.70) < 0.05, str(widths))
-            check('a linked sponsor is a link', page.locator('a.sponsor').count() >= 1)
+            # Whether sponsors link at all is the manager's choice per tier, so
+            # assert the app *follows* it rather than assuming one arrangement.
+            linkable = page.evaluate(
+                'async (id) => ((await (await fetch(`/event/${id}/sponsors/data`)).json()).sponsors'
+                ' || []).filter(s => s.show.linked && s.url).length',
+                args.event,
+            )
+            check('exactly the sponsors configured to link are links',
+                  page.locator('a.sponsor').count() == linkable,
+                  f'{page.locator("a.sponsor").count()} links, {linkable} configured')
+            # The plugin's "largest logo width" has to actually reach the app.
+            # It did not once: the width was being normalised away and replaced
+            # with a constant, which made that box on the settings page do
+            # nothing here while looking like it worked.
+            wanted = page.evaluate(
+                'async (id) => (await (await fetch(`/event/${id}/sponsors/data`)).json()).tiers',
+                args.event,
+            )
+            measured = page.evaluate(
+                '''() => {
+                    const width = document.querySelector('.sponsors').getBoundingClientRect().width;
+                    return [...document.querySelectorAll('.sponsor-tier')].map(tier => {
+                        const card = tier.querySelector('.sponsor');
+                        return [tier.dataset.tier,
+                                card ? (card.getBoundingClientRect().width / width) * 100 : null];
+                    });
+                }'''
+            )
+            by_name = {tier['name']: tier['width_pct'] for tier in wanted}
+            off = [(name, actual, by_name.get(name)) for name, actual in measured
+                   if actual is None or by_name.get(name) is None
+                   or abs(actual - by_name[name]) > 1.5]
+            check('logos take the width the template configures', not off, str(off or measured))
             # Placement is the event manager's choice, made in the plugin. Read
             # what they chose and assert the block is actually there -- rather
             # than assuming a position, which would pass whatever the setting

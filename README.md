@@ -138,7 +138,7 @@ python3 scripts/verify.py --event <id> [--multiday-event <id>] \
     [--no-schedule-event <id>] [--insecure-base http://<lan-ip>:4174]
 ```
 
-Sixty-six checks against a real Indico instance, asserted numerically —
+Sixty-seven checks against a real Indico instance, asserted numerically —
 rendered row counts against the payload, the contents of IndexedDB, the service
 worker's state, and a full offline cold start. "It looked right" is how offline
 bugs survive review, so nothing here is judged by eye.

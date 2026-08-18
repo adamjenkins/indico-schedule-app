@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useRef} from 'react';
+import React, {useEffect, useMemo, useRef} from 'react';
 
 import {getSponsors} from '../db';
 import {useStored} from '../hooks';
@@ -11,12 +11,14 @@ import {SponsorEntry, SponsorTier} from '../types';
  * arrive resolved onto each sponsor, so this decides nothing about *what* to
  * show — only how to lay it out on a phone.
  *
- * Logo sizes keep the plugin's rule. A tier's `width_pct` is its share of the
- * block's width relative to the largest tier being rendered, so a Gold tier at
- * 70 against a Platinum at 100 draws its logos at seven tenths the width,
- * whatever the screen is. On a phone the block is a few hundred pixels wide, so
- * the shares are scaled up from the page's proportions and floored, or the
- * smaller tiers would be thumbnails.
+ * Logo sizes are the plugin's `width_pct`, used exactly as given. It already
+ * combines the tier's size with the template's "largest logo width" setting, so
+ * scaling it here would quietly override a setting the manager can see and
+ * change — which is what an earlier version of this did, and it made that box
+ * on the settings page do nothing at all in the app.
+ *
+ * The app has its own template, so the manager can size it for a phone
+ * independently of the printed page.
  */
 export function Sponsors({eventId, position}: {eventId: number; position: 'above' | 'below'}) {
   const {data: stored} = useStored(() => getSponsors(eventId), [eventId]);
@@ -43,23 +45,28 @@ export function Sponsors({eventId, position}: {eventId: number; position: 'above
     return null;
   }
 
-  const largest = Math.max(...byTier.map(g => g.tier.width_pct));
+  // A `list` template stacks its sponsors one per row unless the tier is marked
+  // to flow inline — the same rule the plugin applies to the page, so a manager
+  // who arranges a headline tier on its own row gets that on the phone too.
+  const stacked = stored.payload.template?.layout === 'list';
 
   return (
     <section className={`sponsors sponsors-${position}`} aria-label="Sponsors">
       <h2 className="sponsors-head">Sponsors</h2>
       {byTier.map(({tier, sponsors}) => (
-        <div key={tier.id} className="sponsor-tier" data-tier={tier.name}>
-          {sponsors.map(sponsor => {
-            const src = pickLogo(sponsor, urls);
-            // The widest tier fills 46% of the block; everything else keeps its
-            // ratio to that. Two logos a row for the top tier reads well at
-            // phone width without any breakpoint arithmetic.
-            const width = `${(tier.width_pct / largest) * 46}%`;
-            return (
-              <SponsorCard key={sponsor.id} sponsor={sponsor} src={src} width={width} />
-            );
-          })}
+        <div
+          key={tier.id}
+          className={stacked && !tier.inline ? 'sponsor-tier stacked' : 'sponsor-tier'}
+          data-tier={tier.name}
+        >
+          {sponsors.map(sponsor => (
+            <SponsorCard
+              key={sponsor.id}
+              sponsor={sponsor}
+              src={pickLogo(sponsor, urls)}
+              width={`${tier.width_pct}%`}
+            />
+          ))}
         </div>
       ))}
     </section>
@@ -79,7 +86,7 @@ function SponsorCard({
   const body = (
     <>
       {src ? (
-        <span className="sponsor-logo" style={{width}}>
+        <span className="sponsor-logo">
           <img src={src} alt={sponsor.name} loading="lazy" />
         </span>
       ) : null}
@@ -93,14 +100,22 @@ function SponsorCard({
     </>
   );
 
+  // The width goes on the card, not on the logo inside it. A percentage width
+  // resolves against the parent's content box, and the card is sized by its own
+  // contents — so a percentage there measured itself and came out arbitrary,
+  // which is why the setting appeared to do nothing.
+  const style = {'--sp-w': width} as React.CSSProperties;
+
   // Offline, an external link is a dead end — but it is the sponsor's own
   // address and worth keeping rather than second-guessing the connection.
   return show.linked && sponsor.url ? (
-    <a className="sponsor" href={sponsor.url} target="_blank" rel="noopener noreferrer">
+    <a className="sponsor" style={style} href={sponsor.url} target="_blank" rel="noopener noreferrer">
       {body}
     </a>
   ) : (
-    <span className="sponsor">{body}</span>
+    <span className="sponsor" style={style}>
+      {body}
+    </span>
   );
 }
 

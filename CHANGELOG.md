@@ -9,6 +9,14 @@ grouped by the round of work that produced them.
 
 ## [Unreleased]
 
+### Fixed (2026-08-18)
+- **The template's "largest logo width" had no effect in the app.** The width
+  was normalised away and replaced with a constant, so the setting looked like
+  it worked and did nothing here. It is now used exactly as the server computes
+  it — and the width goes on the sponsor card rather than on the logo inside it,
+  because a percentage resolves against the parent's content box and the card is
+  sized by its own contents.
+
 ### Added — sponsors and event logos (2026-08-18)
 - **Sponsors** on the schedule screen, from the Event Sponsors plugin. The
   per-tier field choices arrive from the server already resolved onto each
@@ -20,6 +28,8 @@ grouped by the round of work that produced them.
 - The plugin's sizing rule survives the trip — a tier at 70 against one at 100
   draws its logos at seven tenths the width, on a phone exactly as on the
   printed grid.
+- A `list` template stacks its sponsors one per row unless the tier is marked
+  "display inline", matching what the plugin does on the page.
 - The block sits **above or below the day's talks**, as a switch in the plugin
   decides. Above means above the schedule content but below the day tabs and
   the filter controls, which are navigation and belong where the thumb expects
