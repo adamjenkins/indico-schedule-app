@@ -2,7 +2,7 @@ import {Fragment, useEffect, useState} from 'react';
 
 import {getEventDays, setStar, StoredDay} from '../db';
 import {formatDay, formatMinutes} from '../format';
-import {useEvents, useStars, useStored} from '../hooks';
+import {markKey, useEvents, useSponsorMarks, useStars, useStored} from '../hooks';
 import {navigate, replaceSearch} from '../router';
 import {bump} from '../store';
 import {highlight, searchDays, SearchHit} from '../search';
@@ -18,6 +18,7 @@ import {TalkRow} from './TalkRow';
 export function SearchScreen({query}: {query: string}) {
   const [value, setValue] = useState(query);
   const {data: events} = useEvents();
+  const marks = useSponsorMarks();
   const {data: stars} = useStars();
 
   // Keep the URL in step so a search can be shared or reloaded, but debounce it
@@ -79,6 +80,7 @@ export function SearchScreen({query}: {query: string}) {
                 contribution={hit.contribution}
                 roomLabel={hit.roomLabel || null}
                 trackColor={hit.trackColor}
+                sponsor={marks.get(markKey(hit.eventId, hit.contribution.id)) ?? null}
                 starred={starIds.has(`${hit.eventId}|${hit.contribution.id}`)}
                 leadingPill={`${formatDay(hit.day)} ${formatMinutes(hit.contribution.start_minutes)}${
                   multipleEvents ? ` · ${titles.get(hit.eventId) ?? ''}` : ''

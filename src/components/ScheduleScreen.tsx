@@ -3,7 +3,7 @@ import {Fragment, useMemo, useState} from 'react';
 import {setStar} from '../db';
 import {countActiveFilters, EMPTY_FILTERS, filterContributions, parseFilters, serializeFilters} from '../filters';
 import {formatDay, formatTimeRange, nowMinutes, todayIso} from '../format';
-import {useEventDays, useEventRecord, useStarSet, useTicker} from '../hooks';
+import {markKey, useEventDays, useEventRecord, useSponsorMarks, useStarSet, useTicker} from '../hooks';
 import {navigate, replaceSearch} from '../router';
 import {bump, getSyncStatus} from '../store';
 import {syncEvent} from '../sync';
@@ -35,6 +35,9 @@ export function ScheduleScreen({
   const [sheetOpen, setSheetOpen] = useState(false);
 
   useTicker(60_000);
+  // With the other hooks and above the early returns below: a hook called after
+  // a conditional return changes the hook count between renders.
+  const sponsorMarks = useSponsorMarks();
 
   const filters = useMemo(() => parseFilters(search), [search]);
   const status = getSyncStatus(eventId);
@@ -179,6 +182,7 @@ export function ScheduleScreen({
               trackColor={
                 contribution.track_id === null ? null : trackColors.get(contribution.track_id) ?? null
               }
+              sponsor={sponsorMarks.get(markKey(eventId, contribution.id)) ?? null}
               dimmed={dimmed.has(contribution.id)}
               starred={starred.has(contribution.id)}
               onToggleStar={async () => {

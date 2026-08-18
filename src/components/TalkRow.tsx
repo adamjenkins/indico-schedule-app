@@ -23,6 +23,7 @@ export function TalkRow({
   leadingPill,
   title,
   trackColor: chosenTrackColor,
+  sponsor,
 }: {
   contribution: BSContribution;
   roomLabel: string | null;
@@ -36,6 +37,8 @@ export function TalkRow({
   title?: ReactNode;
   /** The manager's colour for this contribution's track, if the payload carried one. */
   trackColor?: string | null;
+  /** A sponsor attached to this talk, drawn small in the corner. */
+  sponsor?: {url: string; name: string} | null;
 }) {
   const accent = trackColor(contribution.track_id, chosenTrackColor);
   // Only a real colour gets a coloured pill. The fallback palette already shows on the
@@ -76,6 +79,7 @@ export function TalkRow({
           ) : null}
         </div>
       </div>
+      <div className="talk-side">
       <button
         className={starred ? 'starbtn on' : 'starbtn'}
         aria-pressed={starred}
@@ -87,6 +91,15 @@ export function TalkRow({
       >
         {starred ? '★' : '☆'}
       </button>
+      {/* Lower right, under the star: small enough to be a credit rather than a
+          claim on the row, and never a link -- tapping a talk should open the
+          talk, whoever is sponsoring it. */}
+      {sponsor ? (
+        <span className="talk-sponsor">
+          <img src={sponsor.url} alt={`Sponsored by ${sponsor.name}`} title={sponsor.name} loading="lazy" />
+        </span>
+      ) : null}
+      </div>
     </div>
   );
 }

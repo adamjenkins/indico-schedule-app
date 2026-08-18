@@ -2,7 +2,7 @@ import {Fragment, useState} from 'react';
 
 import {getEventDays, setStar, StoredDay, StoredEvent} from '../db';
 import {formatDay, formatMinutes, formatTimeRange, nowMinutes, todayIso} from '../format';
-import {useEvents, useStars, useStored, useTicker} from '../hooks';
+import {SponsorMark, markKey, useEvents, useSponsorMarks, useStars, useStored, useTicker} from '../hooks';
 import {navigate} from '../router';
 import {bump} from '../store';
 import {BSContribution} from '../types';
@@ -40,6 +40,7 @@ export function AgendaScreen() {
   const {data: events} = useEvents();
   const {data: stars, loading} = useStars();
   const [showFinished, setShowFinished] = useState(false);
+  const marks = useSponsorMarks();
 
   // Re-renders on a timer, which is what moves a talk from "now" to "finished"
   // without the user having to reload anything.
@@ -147,11 +148,15 @@ export function AgendaScreen() {
                   overlap
                 </div>
                 {group.map(entry => (
-                  <Row key={`${entry.eventId}|${entry.contribution.id}`} entry={entry} />
+                  <Row
+                    key={`${entry.eventId}|${entry.contribution.id}`}
+                    entry={entry}
+                    sponsor={marks.get(markKey(entry.eventId, entry.contribution.id)) ?? null}
+                  />
                 ))}
               </div>
             ) : (
-              <Row entry={first} />
+              <Row entry={first} sponsor={marks.get(markKey(first.eventId, first.contribution.id)) ?? null} />
             )}
           </Fragment>
         );
@@ -162,12 +167,13 @@ export function AgendaScreen() {
   );
 }
 
-function Row({entry}: {entry: AgendaEntry}) {
+function Row({entry, sponsor}: {entry: AgendaEntry; sponsor: SponsorMark | null}) {
   return (
     <TalkRow
       contribution={entry.contribution}
       roomLabel={entry.roomLabel}
       trackColor={entry.trackColor}
+      sponsor={sponsor}
       starred
       dimmed={isFinished(entry)}
       leadingPill={formatTimeRange(entry.contribution.start_minutes, entry.contribution.duration_minutes)}

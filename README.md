@@ -52,7 +52,8 @@ as the primary navigation, rather than a shrunken and unreadable grid.
 - **Event logos** — each event's own logo from Indico's Layout page, on its card
   in the library. Stored on the device like everything else, and simply absent
   when the organisers set none
-- **Sponsors** — the event's sponsors on the schedule screen, above the day's
+- **Sponsors** — a sponsor's logo in the corner of the talks it sponsors, and
+  the event's sponsors on the schedule screen, above the day's
   talks or below them as the event manager chose, sized by the
   same tier rule the web page uses and with their logos stored on the device, so
   they are there offline. Comes from the Event Sponsors plugin, which is
@@ -138,7 +139,7 @@ python3 scripts/verify.py --event <id> [--multiday-event <id>] \
     [--no-schedule-event <id>] [--insecure-base http://<lan-ip>:4174]
 ```
 
-Sixty-nine checks against a real Indico instance, asserted numerically —
+Seventy-two checks against a real Indico instance, asserted numerically —
 rendered row counts against the payload, the contents of IndexedDB, the service
 worker's state, and a full offline cold start. "It looked right" is how offline
 bugs survive review, so nothing here is judged by eye.

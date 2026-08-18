@@ -8,9 +8,11 @@
  */
 import {useEffect, useState, useSyncExternalStore} from 'react';
 
+import {objectUrlFor} from './blobUrls';
 import {
   getEvent,
   getEventDays,
+  listSponsors,
   listEvents,
   listStars,
   StoredDay,
@@ -95,4 +97,49 @@ export function useTicker(intervalMs = 30_000): void {
     const timer = window.setInterval(() => setTick(t => t + 1), intervalMs);
     return () => window.clearInterval(timer);
   }, [intervalMs]);
+}
+
+
+/** A sponsor's mark on a talk: the logo to draw and whose it is. */
+export interface SponsorMark {
+  url: string;
+  name: string;
+}
+
+/** The key a mark is stored under: contribution ids only mean something inside
+ * their own event, and search results mix events freely. */
+export const markKey = (eventId: number, contributionId: number) => `${eventId}|${contributionId}`;
+
+/**
+ * Which talks carry a sponsor's logo.
+ *
+ * Built from the stored sponsor records for every event at once, so one hook
+ * serves the schedule, the agenda and search — the last of which mixes events
+ * and could not use a per-event one. Works offline like everything else,
+ * because it reads what is on the device.
+ *
+ * Where several sponsors are attached to the same talk only the first is
+ * marked: a row is a row, and stacking logos into it would cost more than the
+ * second sponsor is worth. The sponsors block on the schedule is where every
+ * sponsor is listed.
+ */
+export function useSponsorMarks(): Map<string, SponsorMark> {
+  const {data: records} = useStored(() => listSponsors(), []);
+  const marks = new Map<string, SponsorMark>();
+  for (const record of records ?? []) {
+    for (const sponsor of record.payload.sponsors) {
+      const source = sponsor.logo_url ?? sponsor.square_logo_url;
+      const blob = source ? record.logos[source] : undefined;
+      if (!source || !blob) {
+        continue;
+      }
+      for (const contributionId of sponsor.contribution_ids ?? []) {
+        const key = markKey(record.eventId, contributionId);
+        if (!marks.has(key)) {
+          marks.set(key, {url: objectUrlFor(source, blob), name: sponsor.name});
+        }
+      }
+    }
+  }
+  return marks;
 }

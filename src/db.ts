@@ -234,6 +234,10 @@ export async function getSponsors(eventId: number): Promise<StoredSponsors | und
   return (await getDb()).get('sponsors', eventId);
 }
 
+export async function listSponsors(): Promise<StoredSponsors[]> {
+  return (await getDb()).getAll('sponsors');
+}
+
 export async function putSponsors(sponsors: StoredSponsors): Promise<void> {
   const db = await getDb();
   await db.put('sponsors', sponsors);

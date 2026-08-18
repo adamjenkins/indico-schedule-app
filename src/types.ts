@@ -157,6 +157,12 @@ export interface SponsorEntry {
   url: string | null;
   logo_url: string | null;
   square_logo_url: string | null;
+  /**
+   * The contributions this sponsor is attached to, as *global* contribution ids
+   * — the same `id` the schedule payload uses, so the two can be matched
+   * directly. Empty for a sponsor of the event as a whole.
+   */
+  contribution_ids?: number[];
   show: {
     show_logo: boolean;
     show_square_logo: boolean;

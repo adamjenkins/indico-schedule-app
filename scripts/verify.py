@@ -774,6 +774,46 @@ def main() -> int:
             check('the artwork stays inside its box', not alignment['escaped'],
                   str(alignment['escaped']))
 
+            # Sponsors attached to particular talks are marked on those rows.
+            # Conditional on any being attached: it is an event manager's
+            # choice, and an event with none should not fail.
+            attached = page.evaluate(
+                'async (id) => ((await (await fetch(`/event/${id}/sponsors/data`)).json()).sponsors || [])'
+                '.flatMap(s => s.contribution_ids || [])',
+                args.event,
+            )
+            if not attached:
+                print('  --   no sponsor is attached to a contribution; skipping the mark checks')
+            else:
+                page.goto(f'{app}event/{args.event}', wait_until='networkidle')
+                page.wait_for_selector('.talk')
+                page.locator('.talk-sponsor img').first.scroll_into_view_if_needed()
+                page.wait_for_function(
+                    "() => [...document.querySelectorAll('.talk-sponsor img')]"
+                    '.some(i => i.complete && i.naturalWidth > 0)',
+                    timeout=8000,
+                )
+                marks = page.evaluate(
+                    """() => [...document.querySelectorAll('.talk')].map(talk => {
+                        const img = talk.querySelector('.talk-sponsor img');
+                        if (!img) { return null; }
+                        const row = talk.getBoundingClientRect(), mark = img.getBoundingClientRect();
+                        return {
+                            blob: img.src.startsWith('blob:'),
+                            // Lower right: past the middle of the row both ways,
+                            // and not hanging outside it.
+                            right: mark.right > row.left + row.width / 2,
+                            lower: mark.bottom > row.top + row.height / 2,
+                            inside: mark.right <= row.right + 1 && mark.bottom <= row.bottom + 1,
+                        };
+                    }).filter(Boolean)"""
+                )
+                check('exactly the attached talks carry a sponsor mark',
+                      len(marks) == len(set(attached)), f'{len(marks)} marked, {len(set(attached))} attached')
+                check('the mark comes from a stored copy', all(m['blob'] for m in marks), str(marks[:1]))
+                check('and sits in the lower right of its row',
+                      all(m['right'] and m['lower'] and m['inside'] for m in marks), str(marks[:1]))
+
             check('sponsors and their logos are stored on the device',
                   bool(stored) and stored[0] >= 1 and stored[1] >= 1, str(stored))
 

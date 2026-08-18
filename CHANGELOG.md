@@ -9,6 +9,13 @@ grouped by the round of work that produced them.
 
 ## [Unreleased]
 
+### Added (2026-08-18)
+- **A sponsor's logo on the talks it sponsors**, small in the lower right of the
+  row, on the schedule, the agenda and in search results. Drawn from the stored
+  copy like everything else, so it is there offline. Where several sponsors are
+  attached to one talk only the first is marked — a row is a row, and the
+  sponsors block is where they are all listed.
+
 ### Changed (2026-08-18)
 - **Both the start and the finish time** are shown on every talk, on the
   schedule and on My agenda. The time heading groups talks by when they begin
