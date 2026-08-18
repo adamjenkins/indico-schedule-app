@@ -9,7 +9,16 @@ grouped by the round of work that produced them.
 
 ## [Unreleased]
 
+### Changed (2026-08-18)
+- **Both the start and the finish time** are shown on every talk, on the
+  schedule and on My agenda. The time heading groups talks by when they begin
+  and cannot say when each one ends, because talks starting together do not
+  finish together.
+
 ### Fixed (2026-08-18)
+- **Sponsor logos on a row now share a line.** Each is drawn into a box of the
+  same shape with the artwork fitted inside it, standing on the floor, so a row
+  of mixed proportions reads as a row. Fitted, never cropped or stretched.
 - **The template's "largest logo width" had no effect in the app.** The width
   was normalised away and replaced with a constant, so the setting looked like
   it worked and did nothing here. It is now used exactly as the server computes

@@ -601,6 +601,46 @@ def main() -> int:
             check('an event with no logo shows nothing at all',
                   logos and logos[0] is None, str(logos))
 
+        # -- 8b. start and finish times -------------------------------------
+        # Both times, on both tabs. A start alone does not tell an attendee
+        # whether they can make the next thing.
+        page.goto(f'{app}event/{args.event}', wait_until='networkidle')
+        page.wait_for_selector('.talk')
+        shown = page.evaluate(
+            "() => [document.querySelector('.talk .title').textContent.trim(),"
+            " document.querySelector('.talk .pill').textContent.trim()]"
+        )
+        expected_range = page.evaluate(
+            """async (title) => {
+                const req = indexedDB.open('indico-schedule');
+                const db = await new Promise(res => { req.onsuccess = () => res(req.result); });
+                const days = await new Promise(res => {
+                    const tx = db.transaction('days', 'readonly');
+                    const r = tx.objectStore('days').getAll();
+                    r.onsuccess = () => res(r.result);
+                });
+                const c = days.flatMap(d => d.payload.scheduled_contributions)
+                    .find(x => x.title.trim() === title);
+                const at = m => String(Math.floor(m / 60)).padStart(2, '0') + ':'
+                                + String(m % 60).padStart(2, '0');
+                return at(c.start_minutes) + ' \u2013 ' + at(c.start_minutes + (c.duration_minutes || 0));
+            }""",
+            shown[0],
+        )
+        check('the schedule shows the start and the finish', shown[1] == expected_range,
+              f'shown {shown[1]!r}, payload says {expected_range!r}')
+        # Star it only if it is not starred already: an earlier section leaves
+        # one star behind, and clicking it again would empty the agenda.
+        star = page.locator('.talk .starbtn').first
+        if star.get_attribute('aria-pressed') != 'true':
+            star.click()
+            page.wait_for_timeout(500)
+        page.locator('.tabbar button', has_text='My agenda').click()
+        page.wait_for_selector('.talk')
+        agenda = page.evaluate("() => document.querySelector('.talk .pill').textContent.trim()")
+        check('and so does the agenda', agenda == expected_range,
+              f'shown {agenda!r}, payload says {expected_range!r}')
+
         # -- 9b. sponsors ---------------------------------------------------
         # A second plugin entirely, and an optional one whose feature is off by
         # default: most events will never have a block. Everything here is
@@ -625,13 +665,10 @@ def main() -> int:
             )
             check('logos come from stored copies, not live URLs',
                   bool(logos) and all(logo['fromBlob'] for logo in logos), f'{len(logos)} logos')
-            widths = {logo['tier']: logo['width'] for logo in logos}
-            # The plugin's sizing rule has to survive the trip: a tier at 70
-            # against one at 100 draws its logos at seven tenths the width, on a
-            # phone exactly as on the printed grid.
-            ordered = sorted(widths.values(), reverse=True)
-            check('the tier size ratio survives into the app',
-                  len(ordered) >= 2 and abs(ordered[1] / ordered[0] - 0.70) < 0.05, str(widths))
+            # No ratio check here. It used to assert a hardcoded 0.70 and broke
+            # the first time somebody edited a tier -- and the width check below
+            # already compares every tier against the share the payload says it
+            # should take, which is the same claim made precisely.
             # Whether sponsors link at all is the manager's choice per tier, so
             # assert the app *follows* it rather than assuming one arrangement.
             linkable = page.evaluate(
@@ -703,6 +740,40 @@ def main() -> int:
                 }""",
                 args.event,
             )
+            # A logo box of the right height proves nothing if the artwork hangs
+            # out of it -- which happened once and passed a weaker check.
+            alignment = page.evaluate(
+                '''() => {
+                    const rows = new Map();
+                    for (const card of document.querySelectorAll('.sponsor-tier:not(.stacked) .sponsor')) {
+                        const key = Math.round((card.getBoundingClientRect().top + scrollY) / 20);
+                        if (!rows.has(key)) { rows.set(key, []); }
+                        const box = card.querySelector('.sponsor-logo');
+                        if (box) { rows.get(key).push(box.getBoundingClientRect()); }
+                    }
+                    const lines = [...rows.values()].filter(r => r.length > 1).map(r => ({
+                        count: r.length,
+                        bottomSpread: Math.max(...r.map(b => b.bottom)) - Math.min(...r.map(b => b.bottom)),
+                    }));
+                    const escaped = [];
+                    for (const box of document.querySelectorAll('.sponsor-logo')) {
+                        const img = box.querySelector('img');
+                        if (!img) { continue; }
+                        const b = box.getBoundingClientRect(), i = img.getBoundingClientRect();
+                        if (i.bottom > b.bottom + 1 || i.top < b.top - 1) { escaped.push(Math.round(i.height)); }
+                    }
+                    return {lines, escaped};
+                }'''
+            )
+            if alignment['lines']:
+                check('logos on a row stand on one line',
+                      all(line['bottomSpread'] <= 1 for line in alignment['lines']),
+                      str(alignment['lines']))
+            else:
+                print('  --   no row has two sponsors on it; skipping the alignment check')
+            check('the artwork stays inside its box', not alignment['escaped'],
+                  str(alignment['escaped']))
+
             check('sponsors and their logos are stored on the device',
                   bool(stored) and stored[0] >= 1 and stored[1] >= 1, str(stored))
 

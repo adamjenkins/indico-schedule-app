@@ -1359,10 +1359,14 @@ mark {
   margin-bottom: 12px;
 }
 
+/* `stretch`, so every card on a row is the height of that row rather than of
+   its own logo: one tier's logos are drawn at one width and their heights
+   follow the artwork, so otherwise a row of them hangs from the top at ragged
+   depths. The same rule the plugin applies to an inline tier on the page. */
 .sponsor-tier {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: stretch;
   justify-content: center;
   gap: 16px 18px;
   margin-bottom: 16px;
@@ -1389,14 +1393,36 @@ mark {
   min-width: 64px;
 }
 
+/* Every logo gets the same box, two wide by one tall, with the artwork fitted
+   inside it standing on the floor — so a row of mixed shapes shares one line.
+   Bottom-aligning the cards is not enough: the text under each logo wraps to a
+   different number of lines and pushes the logos to different heights.
+
+   `contain`, never `cover`: a logo must not be cropped or stretched to fill a
+   shape it was not drawn for. Same rule, same reasoning, as the plugin's page. */
 .sponsor-logo {
   display: block;
+  flex: 0 0 auto;
   width: 100%;
+  aspect-ratio: 2 / 1;
+
+  /* Load-bearing: a flex item in a column container gets `min-height: auto`,
+     so without this the image's intrinsic height pushes the box past its own
+     aspect ratio and the row goes ragged again. */
+  min-height: 0;
 }
 
 .sponsor-logo img {
   display: block;
   width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+}
+
+/* Stacked, there is no row to share a line with, so the artwork keeps its own
+   proportions instead of being fitted into a box. */
+.sponsor-tier.stacked .sponsor-logo img {
   height: auto;
 }
 
@@ -1446,4 +1472,10 @@ mark {
   flex: 0 0 auto;
   align-items: flex-start;
   text-align: left;
+}
+
+/* Stacked, there is no row to share a line with, so the logo keeps its own
+   proportions rather than being fitted into a box. */
+.sponsor-tier.stacked .sponsor-logo {
+  aspect-ratio: auto;
 }

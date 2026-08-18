@@ -1,7 +1,7 @@
 import {Fragment, useState} from 'react';
 
 import {getEventDays, setStar, StoredDay, StoredEvent} from '../db';
-import {formatDay, formatMinutes, nowMinutes, todayIso} from '../format';
+import {formatDay, formatMinutes, formatTimeRange, nowMinutes, todayIso} from '../format';
 import {useEvents, useStars, useStored, useTicker} from '../hooks';
 import {navigate} from '../router';
 import {bump} from '../store';
@@ -170,7 +170,7 @@ function Row({entry}: {entry: AgendaEntry}) {
       trackColor={entry.trackColor}
       starred
       dimmed={isFinished(entry)}
-      leadingPill={formatMinutes(entry.contribution.start_minutes)}
+      leadingPill={formatTimeRange(entry.contribution.start_minutes, entry.contribution.duration_minutes)}
       onToggleStar={async () => {
         await setStar(entry.eventId, entry.contribution.id, false);
         bump();

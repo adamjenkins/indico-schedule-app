@@ -2,7 +2,7 @@ import {Fragment, useMemo, useState} from 'react';
 
 import {setStar} from '../db';
 import {countActiveFilters, EMPTY_FILTERS, filterContributions, parseFilters, serializeFilters} from '../filters';
-import {formatDay, nowMinutes, todayIso} from '../format';
+import {formatDay, formatTimeRange, nowMinutes, todayIso} from '../format';
 import {useEventDays, useEventRecord, useStarSet, useTicker} from '../hooks';
 import {navigate, replaceSearch} from '../router';
 import {bump, getSyncStatus} from '../store';
@@ -171,6 +171,10 @@ export function ScheduleScreen({
             {newTime ? <TimeHeading minutes={contribution.start_minutes} /> : null}
             <TalkRow
               contribution={contribution}
+              // The heading groups talks by when they start; the pill says when
+              // this one ends, which the heading cannot -- talks starting
+              // together do not finish together.
+              leadingPill={formatTimeRange(contribution.start_minutes, contribution.duration_minutes)}
               roomLabel={contribution.column_id === null ? null : rooms.get(contribution.column_id) ?? null}
               trackColor={
                 contribution.track_id === null ? null : trackColors.get(contribution.track_id) ?? null

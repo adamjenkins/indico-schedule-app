@@ -37,8 +37,8 @@ as the primary navigation, rather than a shrunken and unreadable grid.
 - **The organisation's logo** at the top of the library, taken from Indico's
   own page header, so the app carries whatever branding the server already
   shows
-- **Schedule** — a day's talks in time order, with a "now" marker, room and
-  track labels, and day tabs for multi-day events. Tracks carry the colour their
+- **Schedule** — a day's talks in time order with start and finish times, a
+  "now" marker, room and track labels, and day tabs for multi-day events. Tracks carry the colour their
   event manager chose, falling back to a generated palette where none was set
 - **Filter** — by room group, individual room, or track, reusing the plugin's
   own rules and URL parameters, so a filtered link works in the app *or* the
@@ -138,7 +138,7 @@ python3 scripts/verify.py --event <id> [--multiday-event <id>] \
     [--no-schedule-event <id>] [--insecure-base http://<lan-ip>:4174]
 ```
 
-Sixty-seven checks against a real Indico instance, asserted numerically —
+Sixty-nine checks against a real Indico instance, asserted numerically —
 rendered row counts against the payload, the contents of IndexedDB, the service
 worker's state, and a full offline cold start. "It looked right" is how offline
 bugs survive review, so nothing here is judged by eye.
