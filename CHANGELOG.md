@@ -9,6 +9,11 @@ grouped by the round of work that produced them.
 
 ## [Unreleased]
 
+### Changed
+- **Licensed GPL-3.0-or-later**, with the full text in `LICENSE`. Previously
+  `package.json` declared MIT and there was no licence file at all, which reads
+  as unlicensed to GitHub and to most tooling.
+
 ### Added (2026-08-18)
 - **A sponsor's logo on the talks it sponsors**, small in the lower right of the
   row, on the schedule, the agenda and in search results. Drawn from the stored
