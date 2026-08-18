@@ -268,15 +268,19 @@ scripts/          build, icons, verification, screenshots
 
 ## Licence
 
-**GPL-3.0-or-later.** The full text is in [LICENSE](LICENSE).
+**AGPL-3.0-or-later.** The full text is in [LICENSE](LICENSE).
+
+The AGPL rather than the GPL because this is a thing people *run*, not a thing
+people install: its section 13 covers modifying the app and offering it to users
+over a network, which is the only way anyone ever meets it. A site running a
+modified copy owes its users that modified source, whether or not it hands
+anybody a file.
 
 `src/types.ts` and `src/filters.ts` are copies of files from the Block Schedule
-plugin, which is MIT. MIT is compatible with the GPL and both are the same
-author's work, so they are distributed here under the GPL along with everything
+plugin, which is MIT. MIT is compatible with the AGPL and both are the same
+author's work, so they are distributed here under the AGPL along with everything
 else; the originals remain MIT in their own repository.
 
-Note this is the GPL, not the AGPL: it says nothing about serving the app over
-a network. It does bind distribution — and shipping the built JavaScript to a
-visitor's browser is a distribution — so a site running a modified copy owes its
-users the modified source. If the intent is instead that *any* network use
-requires sharing changes, the AGPL is the licence that says so.
+The two plugins this app talks to — Block Schedule and Event Sponsors — are MIT
+and stay that way. Reading a plugin's JSON over HTTP is not linking, so nothing
+here reaches into them or obliges them.

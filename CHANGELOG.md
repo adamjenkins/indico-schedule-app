@@ -10,9 +10,11 @@ grouped by the round of work that produced them.
 ## [Unreleased]
 
 ### Changed
-- **Licensed GPL-3.0-or-later**, with the full text in `LICENSE`. Previously
+- **Licensed AGPL-3.0-or-later**, with the full text in `LICENSE`. Previously
   `package.json` declared MIT and there was no licence file at all, which reads
-  as unlicensed to GitHub and to most tooling.
+  as unlicensed to GitHub and to most tooling. The AGPL rather than the GPL
+  because this is a thing people run and reach over a network rather than a
+  thing they install — its section 13 is the part that matters here.
 
 ### Added (2026-08-18)
 - **A sponsor's logo on the talks it sponsors**, small in the lower right of the

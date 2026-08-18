@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Installable mobile web app for viewing an Indico Block Schedule offline",
-  "license": "GPL-3.0-or-later",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build && node scripts/build-precache.mjs",
