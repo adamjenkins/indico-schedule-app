@@ -19,7 +19,7 @@
  * tomorrow should not stay invisible; a "yes" is kept far longer, since
  * schedules are not usually torn down.
  */
-import {fetchGridData} from './api';
+import {ApiError, fetchGridData} from './api';
 import {getProbe, putProbe} from './db';
 
 const CONCURRENCY = 3;
@@ -38,8 +38,14 @@ function isFresh(checkedAt: number, hasSchedule: boolean): boolean {
  *
  * An event we cannot see at all (403/404) counts as "no": it would be no use in
  * the library either way, and the picker should not offer it.
+ *
+ * Only a real HTTP answer earns a persisted verdict. A dropped connection or a
+ * server fault says nothing about the *event*, and writing "no" for it would
+ * let one bad wifi moment hide a conference from the picker for a whole day.
+ * Those come back as `null` — unresolved — so the picker can say it could not
+ * check and offer a retry.
  */
-async function probeOne(eventId: number): Promise<boolean> {
+async function probeOne(eventId: number): Promise<boolean | null> {
   const cached = await getProbe(eventId);
   if (cached && isFresh(cached.checkedAt, cached.hasSchedule)) {
     return cached.hasSchedule;
@@ -48,8 +54,13 @@ async function probeOne(eventId: number): Promise<boolean> {
   try {
     const {payload} = await fetchGridData(eventId, null, null);
     hasSchedule = !!payload && payload.columns.length > 0;
-  } catch {
-    hasSchedule = false;
+  } catch (error) {
+    // `auth` and `notfound` are Indico's own word on this event and stay
+    // cacheable negatives; everything else is a failure to ask the question.
+    const kind = error instanceof ApiError ? error.kind : null;
+    if (kind !== 'auth' && kind !== 'notfound') {
+      return null;
+    }
   }
   await putProbe({eventId, hasSchedule, checkedAt: Date.now()});
   return hasSchedule;
@@ -61,13 +72,15 @@ async function probeOne(eventId: number): Promise<boolean> {
  * Results are announced one by one rather than returned together so the picker
  * can fill in as it goes: on a slow connection a list that appears a row at a
  * time is far better than a spinner that eventually produces everything.
+ * `hasSchedule` is `null` for an event whose check itself failed — see
+ * `probeOne` — which the picker reports as uncheckable rather than negative.
  *
  * `signal` is honoured between requests, so closing the picker or typing a new
  * search stops the queue rather than letting it run on in the background.
  */
 export async function probeEvents(
   eventIds: number[],
-  onResult: (eventId: number, hasSchedule: boolean) => void,
+  onResult: (eventId: number, hasSchedule: boolean | null) => void,
   signal?: {cancelled: boolean}
 ): Promise<void> {
   const queue = [...eventIds];

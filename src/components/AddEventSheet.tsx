@@ -3,6 +3,7 @@ import {useEffect, useMemo, useState} from 'react';
 import {
   ApiError,
   CategoryListing,
+  EventListing,
   EventSummary,
   fetchCategory,
   parseEventRef,
@@ -44,9 +45,12 @@ export function AddEventSheet({
   onAdded: (eventId: number) => void;
 }) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<EventSummary[] | null>(null);
+  const [results, setResults] = useState<EventListing | null>(null);
   const [category, setCategory] = useState<CategoryListing | null>(null);
   const [categoryId, setCategoryId] = useState(0);
+  // Bumped by the Try again buttons: re-running the effect is the retry.
+  const [browseAttempt, setBrowseAttempt] = useState(0);
+  const [searchAttempt, setSearchAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -77,9 +81,10 @@ export function AddEventSheet({
     return () => {
       live = false;
     };
-  }, [categoryId]);
+  }, [categoryId, browseAttempt]);
 
   // Search, debounced so a fast typist does not queue a request per keystroke.
+  // `searchEvents` reports failure as a value, so there is no rejection path.
   useEffect(() => {
     const term = query.trim();
     if (term.length < 2) {
@@ -87,10 +92,10 @@ export function AddEventSheet({
       return;
     }
     const timer = window.setTimeout(() => {
-      void searchEvents(term).then(setResults, () => setResults([]));
+      void searchEvents(term).then(setResults);
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [query]);
+  }, [query, searchAttempt]);
 
   const add = async (eventId: number) => {
     setBusyId(eventId);
@@ -114,12 +119,26 @@ export function AddEventSheet({
   };
 
   const searching = query.trim().length >= 2;
+  // Whichever listing is on screen, as a discriminated result: a failed one
+  // contributes no candidates, but must not be mistaken for an empty one.
+  const listing = searching ? results : (category?.events ?? null);
+  const listingFailed = listing !== null && listing.failed;
   const candidates = useMemo(
-    () => (searching ? (results ?? []) : (category?.events ?? [])),
-    [searching, results, category]
+    () => (listing && !listing.failed ? listing.events : []),
+    [listing]
   );
   const filter = useScheduleFilter(candidates);
   const listed = filter.shown;
+
+  const retryListing = () => {
+    if (searching) {
+      // Back to null so the spinner shows while the retry is in flight.
+      setResults(null);
+      setSearchAttempt(current => current + 1);
+    } else {
+      setBrowseAttempt(current => current + 1);
+    }
+  };
 
   return (
     <Sheet label="Add an event" onClose={onClose} className="picker-sheet">
@@ -170,10 +189,29 @@ export function AddEventSheet({
             />
           ))}
 
+          {/* A failed listing gets its own words and a retry: "no events" and
+              "could not load them" call for opposite advice. */}
+          {listingFailed ? (
+            <div className="probe-progress">
+              <p className="meta">
+                {listing.error.kind === 'auth'
+                  ? 'You do not have access to these events.'
+                  : `Could not load ${searching ? 'search results' : 'the events here'} — the connection or the server did not answer.`}
+              </p>
+              <button className="btn ghost" onClick={retryListing}>
+                Try again
+              </button>
+            </div>
+          ) : null}
+
           <FilterProgress filter={filter} />
 
+          {/* `unresolved` keeps the dead-end honest: with checks unanswered,
+              "none of these has a schedule" would be an assertion nobody made. */}
           {!loading &&
+          !listingFailed &&
           !filter.checking &&
+          filter.unresolved === 0 &&
           listed.length === 0 &&
           !filter.more &&
           (!category?.subcategories.length || searching) ? (
@@ -206,6 +244,10 @@ interface ScheduleFilter {
   /** How many are still unchecked beyond the current batch. */
   more: number;
   checkMore: () => void;
+  /** How many checks failed outright — connection or server, not the event. */
+  unresolved: number;
+  /** Ask again about the events whose checks failed. */
+  retry: () => void;
 }
 
 /**
@@ -217,8 +259,11 @@ interface ScheduleFilter {
  * twice fills in immediately.
  */
 function useScheduleFilter(candidates: EventSummary[]): ScheduleFilter {
-  const [verdicts, setVerdicts] = useState<Map<number, boolean>>(new Map());
+  // A verdict of `null` means the check itself failed — flaky wifi, a 500 —
+  // and is never persisted (see probe.ts), so a retry really does re-ask.
+  const [verdicts, setVerdicts] = useState<Map<number, boolean | null>>(new Map());
   const [batch, setBatch] = useState(PROBE_BATCH);
+  const [attempt, setAttempt] = useState(0);
   // Identity of the *listing*, not of the array: a re-render must not restart
   // the queue, but navigating to another category must.
   const listingKey = candidates.map(event => event.id).join(',');
@@ -252,7 +297,7 @@ function useScheduleFilter(candidates: EventSummary[]): ScheduleFilter {
       signal.cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listingKey, batch]);
+  }, [listingKey, batch, attempt]);
 
   const slice = candidates.slice(0, batch);
   const checked = slice.filter(event => verdicts.has(event.id)).length;
@@ -264,6 +309,21 @@ function useScheduleFilter(candidates: EventSummary[]): ScheduleFilter {
     total: candidates.length,
     more: Math.max(0, candidates.length - batch),
     checkMore: () => setBatch(current => current + PROBE_BATCH),
+    unresolved: slice.filter(event => verdicts.get(event.id) === null).length,
+    retry: () => {
+      // Forget only the failed answers; the real ones are cached on the device
+      // anyway, so the re-run pays one request per still-unanswered event.
+      setVerdicts(previous => {
+        const next = new Map(previous);
+        for (const [id, verdict] of previous) {
+          if (verdict === null) {
+            next.delete(id);
+          }
+        }
+        return next;
+      });
+      setAttempt(current => current + 1);
+    },
   };
 }
 
@@ -283,6 +343,21 @@ function FilterProgress({filter}: {filter: ScheduleFilter}) {
       <p className="meta probe-progress">
         Checking which events have a schedule… {filter.checked} of {filter.batch}
       </p>
+    );
+  }
+  if (filter.unresolved > 0) {
+    // Failed checks are not "no": saying so, and offering to ask again, is the
+    // difference between "no schedules here" and the truth on flaky wifi.
+    return (
+      <div className="probe-progress">
+        <p className="meta">
+          Could not check {filter.unresolved} of these {filter.unresolved === 1 ? 'event' : 'events'} —
+          the connection or the server did not answer.
+        </p>
+        <button className="btn ghost" onClick={filter.retry}>
+          Try again
+        </button>
+      </div>
     );
   }
   if (filter.more > 0) {

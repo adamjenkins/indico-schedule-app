@@ -7,6 +7,7 @@ import {useEvents, useStars} from '../hooks';
 import {navigate} from '../router';
 import {bump} from '../store';
 import {syncAll} from '../sync';
+import {fetchBuildId} from '../update';
 import {InstallCard} from './InstallCard';
 
 /**
@@ -21,10 +22,12 @@ export function SettingsScreen() {
   const {data: stars} = useStars();
   const [usage, setUsage] = useState<number | null>(null);
   const [user, setUser] = useState<{name: string} | null | undefined>(undefined);
+  const [buildId, setBuildId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     void estimateUsage().then(setUsage);
+    void fetchBuildId().then(setBuildId);
     void fetchCurrentUser().then(current =>
       setUser(current ? {name: current.full_name ?? current.email ?? 'signed in'} : null)
     );
@@ -123,6 +126,16 @@ export function SettingsScreen() {
             Remove all saved data
           </button>
         )}
+      </div>
+
+      <div className="settings-group">
+        <h2>APP</h2>
+        <div className="kv">
+          <span>Version</span>
+          {/* The deployed build's id — the thing to quote in a bug report.
+              A dash on the dev server, which has no asset manifest. */}
+          <span>{buildId ?? '—'}</span>
+        </div>
       </div>
     </>
   );

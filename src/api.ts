@@ -18,8 +18,20 @@ import {BSGridData, looksLikeGridData, SponsorsPayload} from './types';
  * perfectly real, it just has no block schedule configured. It is a kind of its
  * own because "this event has nothing for the app to show" and "this event does
  * not exist" need different words on screen.
+ *
+ * `storage` never comes from the network at all: it is IndexedDB refusing to
+ * read or write — private browsing, Lockdown Mode, a full disk. It lives in
+ * this union because the error screens already speak `ApiError`, and "this
+ * device is not saving data" deserves its own words as much as any HTTP fault.
  */
-export type FailureKind = 'offline' | 'auth' | 'notfound' | 'contract' | 'server' | 'noschedule';
+export type FailureKind =
+  | 'offline'
+  | 'auth'
+  | 'notfound'
+  | 'contract'
+  | 'server'
+  | 'noschedule'
+  | 'storage';
 
 export class ApiError extends Error {
   readonly kind: FailureKind;
@@ -33,27 +45,61 @@ export class ApiError extends Error {
   }
 }
 
-const JSON_HEADERS = {Accept: 'application/json'};
+/**
+ * `X-Requested-With` is what makes Indico answer errors in JSON: its error
+ * handlers check `request.is_xhr` (that header, verbatim) and deliberately
+ * ignore `Accept`. Without it a signed-out request is not refused but
+ * *redirected* to the login page — a 200 with HTML — and the real status is
+ * lost before this code ever sees it.
+ */
+const JSON_HEADERS = {Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest'};
+
+/**
+ * Every request gets a deadline. A captive portal or a wifi network that
+ * accepts TCP and then goes silent — the standard conference-hotel failure —
+ * leaves an unsignalled fetch pending forever, and everything queued behind it
+ * with it. Generous enough for a big day payload on a bad connection.
+ */
+const REQUEST_TIMEOUT_MS = 15_000;
 
 /**
  * Indico renders an HTML error page unless the request asks for JSON, so every
  * call sends `Accept: application/json` and gets a machine-readable body back.
  */
 async function request(url: string, init: RequestInit = {}): Promise<Response> {
+  // Feature-detected: a browser without AbortSignal.timeout just loses the
+  // deadline — a worse experience on a stalled network, but a working app,
+  // where an unguarded call would fail every request before it started.
+  const timeout =
+    typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(REQUEST_TIMEOUT_MS) : undefined;
+  const signal =
+    init.signal && timeout && typeof AbortSignal.any === 'function'
+      ? AbortSignal.any([init.signal, timeout])
+      : init.signal ?? timeout;
   try {
     return await fetch(url, {
       credentials: 'same-origin',
       ...init,
+      signal,
       headers: {...JSON_HEADERS, ...(init.headers ?? {})},
     });
   } catch (cause) {
-    // fetch only rejects for network-level failures, which for our purposes
-    // means "no usable connection" — every HTTP status resolves normally.
-    throw new ApiError('offline', 'No connection', null);
+    // fetch only rejects for network-level failures — every HTTP status
+    // resolves normally. A timeout lands here too, and counts as offline: a
+    // connection that never answers and no connection at all get the same
+    // words on screen, and the same cached copy behind them.
+    const timedOut = cause instanceof DOMException && cause.name === 'TimeoutError';
+    throw new ApiError('offline', timedOut ? 'The connection timed out' : 'No connection', null);
   }
 }
 
 function classify(response: Response): ApiError | null {
+  // Belt and braces alongside `X-Requested-With`: if Indico redirected us to
+  // the login page anyway, this was an authentication refusal whatever the
+  // final status says — never let it reach a JSON parse as a "200".
+  if (response.redirected && new URL(response.url).pathname.startsWith('/login')) {
+    return new ApiError('auth', 'Not signed in', response.status);
+  }
   if (response.ok || response.status === 304) {
     return null;
   }
@@ -170,6 +216,24 @@ interface LegacyDate {
 }
 
 /**
+ * A listing request that failed is not a listing that is empty.
+ *
+ * "No events here" invites giving up; "could not load them" invites retrying,
+ * and the picker needs to know which words to use. The outcome is a value
+ * rather than a thrown error because a 404 or 422 — no such listing, query
+ * rejected — genuinely *is* an empty answer and flows to the same caller.
+ */
+export type EventListing =
+  | {failed: false; events: EventSummary[]}
+  | {failed: true; error: ApiError};
+
+/** Wrap a network-level failure as a failed listing rather than a throw. */
+function failedListing(caught: unknown): EventListing {
+  const error = caught instanceof ApiError ? caught : new ApiError('offline', 'No connection');
+  return {failed: true, error};
+}
+
+/**
  * Browse a category: its sub-categories and the events directly in it.
  *
  * Two requests because Indico splits them: `/category/<id>/info` knows the tree,
@@ -181,7 +245,7 @@ export interface CategoryListing {
   title: string;
   path: {id: number; title: string}[];
   subcategories: {id: number; title: string; deep_event_count?: number}[];
-  events: EventSummary[];
+  events: EventListing;
 }
 
 export async function fetchCategory(categoryId: number): Promise<CategoryListing> {
@@ -204,18 +268,29 @@ export async function fetchCategory(categoryId: number): Promise<CategoryListing
   };
 }
 
-async function fetchCategoryEvents(categoryId: number): Promise<EventSummary[]> {
+async function fetchCategoryEvents(categoryId: number): Promise<EventListing> {
   // A wide window rather than "upcoming": people look up a conference that
   // started yesterday at least as often as one starting tomorrow.
   //
   // Days, not years: Indico's date parser rejects `-1y` with
   // "Impossible to parse '-1y'", and only the `d`/`w`/`m` units are safe.
   const params = new URLSearchParams({from: '-365d', to: '730d', limit: '200', pretty: 'no'});
-  const response = await request(`/export/categ/${categoryId}.json?${params}`);
-  if (!response.ok) {
-    return [];
+  let response: Response;
+  try {
+    response = await request(`/export/categ/${categoryId}.json?${params}`);
+  } catch (caught) {
+    return failedListing(caught);
   }
-  const body = (await response.json()) as {
+  if (!response.ok) {
+    // 404 and 422 are answers — no such listing, rejected query. Everything
+    // else (403, 429, a 500) must keep its identity: presenting it as an
+    // empty category would tell the user there is nothing here to add.
+    if (response.status === 404 || response.status === 422) {
+      return {failed: false, events: []};
+    }
+    return {failed: true, error: classify(response) ?? new ApiError('server', `Indico returned ${response.status}`, response.status)};
+  }
+  let body: {
     results?: {
       id: string;
       title: string;
@@ -224,7 +299,12 @@ async function fetchCategoryEvents(categoryId: number): Promise<EventSummary[]> 
       location?: string;
     }[];
   };
-  return (body.results ?? [])
+  try {
+    body = await response.json();
+  } catch {
+    return {failed: true, error: new ApiError('contract', 'Indico returned something that is not an event list')};
+  }
+  const events = (body.results ?? [])
     .map(item => ({
       id: parseInt(item.id, 10),
       title: item.title,
@@ -235,18 +315,28 @@ async function fetchCategoryEvents(categoryId: number): Promise<EventSummary[]> 
     }))
     .filter(item => Number.isFinite(item.id))
     .sort((a, b) => (b.startDate ?? '').localeCompare(a.startDate ?? ''));
+  return {failed: false, events};
 }
 
 /** Search events by title, using Indico's own search API. */
-export async function searchEvents(query: string): Promise<EventSummary[]> {
+export async function searchEvents(query: string): Promise<EventListing> {
   const params = new URLSearchParams({q: query, type: 'event'});
-  const response = await request(`/search/api/search?${params}`);
+  let response: Response;
+  try {
+    response = await request(`/search/api/search?${params}`);
+  } catch (caught) {
+    return failedListing(caught);
+  }
   if (!response.ok) {
     // 422 simply means the query was rejected (too short, say) — not an error
-    // worth showing, just no results.
-    return [];
+    // worth showing, just no results. Anything else is a search that did not
+    // happen, which must not read as "no matching events".
+    if (response.status === 404 || response.status === 422) {
+      return {failed: false, events: []};
+    }
+    return {failed: true, error: classify(response) ?? new ApiError('server', `Indico returned ${response.status}`, response.status)};
   }
-  const body = (await response.json()) as {
+  let body: {
     results?: {
       event_id: number;
       title: string;
@@ -256,7 +346,12 @@ export async function searchEvents(query: string): Promise<EventSummary[]> {
       category_path?: {title: string}[];
     }[];
   };
-  return (body.results ?? []).map(item => ({
+  try {
+    body = await response.json();
+  } catch {
+    return {failed: true, error: new ApiError('contract', 'Indico returned something that is not a result list')};
+  }
+  const events = (body.results ?? []).map(item => ({
     id: item.event_id,
     title: item.title,
     startDate: item.start_dt?.slice(0, 10) ?? null,
@@ -264,6 +359,7 @@ export async function searchEvents(query: string): Promise<EventSummary[]> {
     location: item.location?.venue_name || item.location?.room_name || null,
     categoryPath: (item.category_path ?? []).map(part => part.title),
   }));
+  return {failed: false, events};
 }
 
 // -- abstracts ------------------------------------------------------------

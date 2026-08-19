@@ -19,7 +19,9 @@
   --accent: #1f5c96;
   --accent-ink: #ffffff;
   --accent-soft: #e8f0f9;
-  --star: #d99a2b;
+  /* Dark enough to clear 3:1 on white (WCAG 1.4.11) — the star is a control,
+     not decoration, and the lighter brand amber does not survive daylight. */
+  --star: #a9701a;
   --danger: #b8453a;
   --danger-soft: #fdeceb;
   --ok: #3f7a48;
@@ -218,6 +220,27 @@ a {
   color: var(--accent);
 }
 
+/* --- schedule header ----------------------------------------------------- */
+
+/* The day strip and the filter row, pinned while the list scrolls. Content
+   scrolls inside .main rather than the document, so without this the only way
+   back to the filter on a 200-row day is to scroll the whole list — not even
+   iOS's tap-the-status-bar gesture reaches a nested container. The negative
+   margins bleed over .main's padding; ScheduleScreen measures the rendered
+   height into --schedhead-h so the time headings can pin just below. */
+.schedhead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  margin: -12px -14px 12px;
+  background: var(--bg);
+}
+
+.schedhead .chips {
+  margin: 0;
+  padding: 12px 14px 8px;
+}
+
 /* --- day tabs ------------------------------------------------------------ */
 
 .daytabs {
@@ -236,7 +259,7 @@ a {
 
 .daytabs button {
   flex: 0 0 auto;
-  min-height: 34px;
+  min-height: var(--tap);
   padding: 6px 14px;
   border: 1px solid transparent;
   border-radius: 20px;
@@ -262,7 +285,7 @@ a {
 }
 
 .chip {
-  min-height: 32px;
+  min-height: var(--tap);
   padding: 5px 12px;
   border: 1px solid var(--rule);
   border-radius: 20px;
@@ -347,7 +370,9 @@ a {
 
 .timehead {
   position: sticky;
-  top: 0;
+  /* Below the sticky schedule header where there is one; 0 on the agenda and
+     search screens, which set no --schedhead-h. */
+  top: var(--schedhead-h, 0);
   z-index: 5;
   margin: 14px 0 8px;
   padding: 4px 0;
@@ -364,6 +389,7 @@ a {
 }
 
 .talk {
+  position: relative;
   display: flex;
   gap: 10px;
   align-items: flex-start;
@@ -387,13 +413,35 @@ a {
   min-width: 0;
 }
 
+/* The open control wraps the row's text; the whole card stays one tap area
+   because its ::after stretches over the row. The star column is positioned
+   later in the DOM, so it paints above the overlay and stays reachable. */
+.talk-open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  color: inherit;
+}
+
+.talk-open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-sm);
+}
+
 .talk .title {
+  display: block;
   font-size: 15px;
   font-weight: 650;
   line-height: 1.3;
 }
 
 .talk .who {
+  display: block;
   margin-top: 3px;
   color: var(--muted);
   font-size: 13px;
@@ -431,7 +479,9 @@ a {
   margin: -10px -6px -10px 0;
   border: 0;
   background: none;
-  color: var(--rule);
+  /* --muted, not --rule: the empty star is the app's main invitation and has
+     to be visible on a phone outdoors, not blend into the hairlines. */
+  color: var(--muted);
   font-size: 21px;
   line-height: 1;
 }
@@ -485,14 +535,31 @@ a {
   color: var(--danger);
 }
 
+/* A full 44px target on an 18px line: the negative margins swallow the extra
+   height so the banner keeps its rhythm while the tap area does not. This is
+   the Retry link after a failed refresh — the worst place to be hard to hit. */
 .banner button {
-  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  margin: -13px 0 -13px auto;
   border: 0;
   background: none;
   color: inherit;
   font-weight: 700;
   text-decoration: underline;
   padding: 0;
+}
+
+/* The "new version is ready" note sits in the app frame between the bar and
+   the scroll area, so it neither scrolls away nor covers content. */
+.update-note {
+  padding: 10px 14px 0;
+  background: var(--bg);
+}
+
+.update-note .banner {
+  margin-bottom: 0;
 }
 
 /* --- forms and buttons --------------------------------------------------- */
@@ -809,7 +876,13 @@ a {
   border-bottom: 1px solid var(--rule);
 }
 
+/* Same trick as .banner button: the tap area meets --tap, the negative
+   margins keep the breadcrumb line at text height. */
 .crumbs button {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  margin: -13px 0;
   border: 0;
   background: none;
   padding: 0;
@@ -1484,12 +1557,23 @@ mark {
    it. A column rather than an absolute position, so the two can never land on
    top of each other however tall the row grows. */
 .talk-side {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   justify-content: space-between;
   align-self: stretch;
   gap: 6px;
+  /* The column floats above the open button's overlay so the star stays
+     reachable — but only the star may catch taps. The sponsor mark and the
+     space between them fall through and open the talk, as anywhere else on
+     the row does. */
+  pointer-events: none;
+}
+
+.talk-side .starbtn {
+  pointer-events: auto;
 }
 
 /* A credit, not a claim on the row: small, quiet, and deliberately not a link —

@@ -9,7 +9,12 @@ import {
   subscribeInstall,
 } from '../install';
 
-function useInstallState(): InstallState {
+/**
+ * Install state as a subscription, not a sample. Chrome fires
+ * `beforeinstallprompt` asynchronously after load, so anything that reads the
+ * state once at mount renders the pre-prompt answer and never hears better.
+ */
+export function useInstallState(): InstallState {
   return useSyncExternalStore(subscribeInstall, getInstallState, getInstallState);
 }
 

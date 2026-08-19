@@ -173,9 +173,17 @@ export async function putEvent(event: StoredEvent): Promise<void> {
 
 export async function removeEvent(id: number): Promise<void> {
   const db = await getDb();
-  const tx = db.transaction(['events', 'days', 'stars', 'details'], 'readwrite');
+  const tx = db.transaction(
+    ['events', 'days', 'stars', 'details', 'sponsors', 'probes'],
+    'readwrite'
+  );
   await tx.objectStore('events').delete(id);
   await tx.objectStore('details').delete(id);
+  // Sponsors and probes are keyed by event id like details, and go with the
+  // event: the sponsor record holds real logo bytes, and a probe verdict for
+  // an event nobody follows is a row that would otherwise live forever.
+  await tx.objectStore('sponsors').delete(id);
+  await tx.objectStore('probes').delete(id);
   for (const store of ['days', 'stars'] as const) {
     // Removing an event should not leave its cached days and stars behind:
     // re-adding it later would otherwise resurrect a stale agenda.
@@ -202,6 +210,27 @@ export async function getEventDays(eventId: number): Promise<StoredDay[]> {
 
 export async function putDay(day: StoredDay): Promise<void> {
   await (await getDb()).put('days', day);
+}
+
+/**
+ * Drop cached days the server no longer lists for an event.
+ *
+ * Days are removed from events as well as added while they run, and a day
+ * written once and never named again would keep its talks surfacing in search
+ * and on the agenda — clearable only by wiping everything.
+ */
+export async function pruneDays(eventId: number, keep: readonly string[]): Promise<void> {
+  const db = await getDb();
+  const wanted = new Set(keep);
+  const tx = db.transaction('days', 'readwrite');
+  let cursor = await tx.store.index('eventId').openCursor(eventId);
+  while (cursor) {
+    if (!wanted.has(cursor.value.day)) {
+      await cursor.delete();
+    }
+    cursor = await cursor.continue();
+  }
+  await tx.done;
 }
 
 // -- abstracts ------------------------------------------------------------

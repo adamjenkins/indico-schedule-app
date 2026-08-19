@@ -1,15 +1,16 @@
-import {Fragment, useMemo, useState} from 'react';
+import {CSSProperties, Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState} from 'react';
 
 import {setStar} from '../db';
 import {countActiveFilters, EMPTY_FILTERS, filterContributions, parseFilters, serializeFilters} from '../filters';
 import {formatDay, formatTimeRange, nowMinutes, todayIso} from '../format';
-import {markKey, useEventDays, useEventRecord, useSponsorMarks, useStarSet, useTicker} from '../hooks';
+import {markKey, useEventDays, useEventRecord, useSponsorMarks, useStarSet, useSyncStatus, useTicker} from '../hooks';
 import {navigate, replaceSearch} from '../router';
-import {bump, getSyncStatus} from '../store';
+import {bump} from '../store';
 import {syncEvent} from '../sync';
+import {BSContribution} from '../types';
 import {FilterSheet} from './FilterSheet';
 import {Sponsors} from './Sponsors';
-import {Banner, EmptyState, ErrorState, Spinner} from './States';
+import {Banner, EmptyState, ErrorState, Spinner, STORAGE_ERROR} from './States';
 import {TalkRow, TimeHeading} from './TalkRow';
 
 /**
@@ -30,7 +31,7 @@ export function ScheduleScreen({
   search: string;
 }) {
   const {data: event} = useEventRecord(eventId);
-  const {data: days, loading} = useEventDays(eventId);
+  const {data: days, loading, error: readError} = useEventDays(eventId);
   const starred = useStarSet(eventId);
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -40,7 +41,7 @@ export function ScheduleScreen({
   const sponsorMarks = useSponsorMarks();
 
   const filters = useMemo(() => parseFilters(search), [search]);
-  const status = getSyncStatus(eventId);
+  const status = useSyncStatus(eventId);
 
   const selectedDay = day ?? event?.days[0] ?? days?.[0]?.day ?? null;
   const stored = days?.find(d => d.day === selectedDay);
@@ -50,8 +51,45 @@ export function ScheduleScreen({
     [stored, filters]
   );
 
+  // One function shared by every row, so a star tap re-renders the row it
+  // changed and the memoised rest bail out. The row hands back its own
+  // contribution and star state, which is what keeps these closure-free.
+  const toggleStar = useCallback(
+    (contribution: BSContribution, starred: boolean) => {
+      void setStar(eventId, contribution.id, !starred).then(() => bump('stars'));
+    },
+    [eventId]
+  );
+  const openTalk = useCallback(
+    (contribution: BSContribution) => navigate(`event/${eventId}/${selectedDay}/talk/${contribution.id}`),
+    [eventId, selectedDay]
+  );
+
+  // The sticky header's measured height feeds the time headings' offset: they
+  // must pin *below* it, and its height is not a constant — the day strip only
+  // exists on multi-day events, and the chips row wraps on narrow screens.
+  const headRef = useRef<HTMLDivElement | null>(null);
+  const [headHeight, setHeadHeight] = useState(0);
+  useLayoutEffect(() => {
+    const head = headRef.current;
+    if (!head) {
+      return;
+    }
+    const measure = () => setHeadHeight(head.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(head);
+    return () => observer.disconnect();
+  }, [stored !== undefined]);
+
   if (loading && !days) {
     return <Spinner />;
+  }
+
+  // The stored copy could not be *read* — different from not having one, and
+  // "Nothing saved for this day" below would be the wrong story to tell.
+  if (readError) {
+    return <ErrorState error={STORAGE_ERROR} />;
   }
 
   if (!stored) {
@@ -95,21 +133,44 @@ export function ScheduleScreen({
   let nowDrawn = false;
 
   return (
-    <>
-      {event && event.days.length > 1 ? (
-        <div className="daytabs" style={{margin: '-12px -14px 12px'}}>
-          {event.days.map(candidate => (
-            <button
-              key={candidate}
-              aria-current={candidate === selectedDay}
-              onClick={() => navigate(`event/${eventId}/${candidate}${serializeFilters(filters)}`)}
-            >
-              {formatDay(candidate)}
-            </button>
-          ))}
-        </div>
-      ) : null}
+    <div className="schedule-view" style={{'--schedhead-h': `${headHeight}px`} as CSSProperties}>
+      {/* Day tabs and the filter row stay pinned while the list scrolls: on a
+          long day they are otherwise thousands of pixels from the thumb, and
+          the scroll container is .main, so not even iOS's tap-the-status-bar
+          gesture would bring them back. */}
+      <div className="schedhead" ref={headRef}>
+        {event && event.days.length > 1 ? (
+          <div className="daytabs">
+            {event.days.map(candidate => (
+              <button
+                key={candidate}
+                aria-current={candidate === selectedDay}
+                onClick={() => navigate(`event/${eventId}/${candidate}${serializeFilters(filters)}`)}
+              >
+                {formatDay(candidate)}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
+        <div className="chips">
+          <button className={activeCount ? 'chip on' : 'chip'} onClick={() => setSheetOpen(true)}>
+            {activeCount ? `Filtered · ${activeCount}` : 'Filter'}
+          </button>
+          {activeCount ? (
+            <button className="chip" onClick={() => setFilters(EMPTY_FILTERS)}>
+              Clear <span className="x">×</span>
+            </button>
+          ) : null}
+          <span className="chip" style={{border: 0, background: 'none', color: 'var(--muted)'}}>
+            {view!.visibleColumns.length} of {grid.columns.length} rooms · {items.length} talks
+          </span>
+        </div>
+      </div>
+
+      {/* Below the sticky header rather than inside it: a failed-refresh note
+          should be read once and allowed to scroll away, not pinned over the
+          schedule for the rest of the day. */}
       {status.error ? (
         <Banner tone="bad" action={{label: 'Retry', onClick: () => void syncEvent(eventId)}}>
           {status.error.kind === 'offline'
@@ -117,20 +178,6 @@ export function ScheduleScreen({
             : `Could not refresh: ${status.error.message}.`}
         </Banner>
       ) : null}
-
-      <div className="chips">
-        <button className={activeCount ? 'chip on' : 'chip'} onClick={() => setSheetOpen(true)}>
-          {activeCount ? `Filtered · ${activeCount}` : 'Filter'}
-        </button>
-        {activeCount ? (
-          <button className="chip" onClick={() => setFilters(EMPTY_FILTERS)}>
-            Clear <span className="x">×</span>
-          </button>
-        ) : null}
-        <span className="chip" style={{border: 0, background: 'none', color: 'var(--muted)'}}>
-          {view!.visibleColumns.length} of {grid.columns.length} rooms · {items.length} talks
-        </span>
-      </div>
 
       {/* Above the talks, but below the day tabs and the filter controls: those
           are navigation and belong where the thumb expects them. This is the
@@ -185,11 +232,8 @@ export function ScheduleScreen({
               sponsor={sponsorMarks.get(markKey(eventId, contribution.id)) ?? null}
               dimmed={dimmed.has(contribution.id)}
               starred={starred.has(contribution.id)}
-              onToggleStar={async () => {
-                await setStar(eventId, contribution.id, !starred.has(contribution.id));
-                bump();
-              }}
-              onOpen={() => navigate(`event/${eventId}/${selectedDay}/talk/${contribution.id}`)}
+              onToggleStar={toggleStar}
+              onOpen={openTalk}
             />
           </Fragment>
         );
@@ -205,6 +249,6 @@ export function ScheduleScreen({
           onClose={() => setSheetOpen(false)}
         />
       ) : null}
-    </>
+    </div>
   );
 }

@@ -249,7 +249,7 @@ src/
   api.ts          talking to Indico; errors classified so the UI can respond
   db.ts           IndexedDB: events, cached days, stars
   sync.ts         startup refresh and per-event refresh
-  store.ts        a revision counter components subscribe to
+  store.ts        named revision channels components subscribe to
   hooks.ts        read stored data, re-read when it changes
   filters.ts      room/group/track filtering (ported from the plugin)
   search.ts       local search and match highlighting
@@ -257,6 +257,7 @@ src/
   install.ts      whether it is installed, promptable, or why neither
   probe.ts        which events have a block schedule, asked once and remembered
   branding.ts     the site logo, lifted from Indico's page header and measured
+  update.ts       which build is running, and when a newer one is ready
   richtext.tsx    abstracts rendered through an HTML allow-list, never raw
   components/     one file per screen, plus TalkRow and the filter sheet
 public/

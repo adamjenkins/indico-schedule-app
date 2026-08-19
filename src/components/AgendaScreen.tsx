@@ -6,7 +6,7 @@ import {SponsorMark, markKey, useEvents, useSponsorMarks, useStars, useStored, u
 import {navigate} from '../router';
 import {bump} from '../store';
 import {BSContribution} from '../types';
-import {EmptyState, Spinner} from './States';
+import {EmptyState, ErrorState, Spinner, STORAGE_ERROR} from './States';
 import {TalkRow} from './TalkRow';
 
 interface AgendaEntry {
@@ -38,7 +38,7 @@ interface AgendaEntry {
  */
 export function AgendaScreen() {
   const {data: events} = useEvents();
-  const {data: stars, loading} = useStars();
+  const {data: stars, loading, error: starsError} = useStars();
   const [showFinished, setShowFinished] = useState(false);
   const marks = useSponsorMarks();
 
@@ -46,7 +46,7 @@ export function AgendaScreen() {
   // without the user having to reload anything.
   useTicker();
 
-  const {data: entries} = useStored(async () => {
+  const {data: entries, error: entriesError} = useStored(async () => {
     if (!events || !stars) {
       return [] as AgendaEntry[];
     }
@@ -86,10 +86,18 @@ export function AgendaScreen() {
         a.day.localeCompare(b.day) ||
         (a.contribution.start_minutes ?? 0) - (b.contribution.start_minutes ?? 0)
     );
-  }, [events?.length ?? 0, stars?.length ?? 0]);
+    // Stars are a real dependency here, unlike most screens: unstarring must
+    // drop the row, so this list re-reads on star changes by design.
+  }, [events?.length ?? 0, stars?.length ?? 0], ['events', 'days', 'stars']);
 
   if (loading && !stars) {
     return <Spinner />;
+  }
+
+  // A failed read is not an empty agenda: "No starred talks" would tell the
+  // user their stars are gone when the truth is storage refused to answer.
+  if (starsError || entriesError) {
+    return <ErrorState error={STORAGE_ERROR} />;
   }
 
   const all = entries ?? [];
@@ -179,7 +187,7 @@ function Row({entry, sponsor}: {entry: AgendaEntry; sponsor: SponsorMark | null}
       leadingPill={formatTimeRange(entry.contribution.start_minutes, entry.contribution.duration_minutes)}
       onToggleStar={async () => {
         await setStar(entry.eventId, entry.contribution.id, false);
-        bump();
+        bump('stars');
       }}
       onOpen={() => navigate(`event/${entry.eventId}/${entry.day}/talk/${entry.contribution.id}`)}
     />

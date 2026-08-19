@@ -20,7 +20,7 @@ import {useStored} from '../hooks';
  * jumping on first load and makes "this server has no logo" a non-event.
  */
 export function SiteLogo() {
-  const {data: branding} = useStored<StoredBranding | undefined>(() => getBranding(), []);
+  const {data: branding} = useStored<StoredBranding | undefined>(() => getBranding(), [], ['branding']);
   const source = useBlobUrl(branding?.blob ?? null) ?? branding?.url ?? null;
   const [failed, setFailed] = useState(false);
 

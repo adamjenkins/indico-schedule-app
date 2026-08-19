@@ -14,34 +14,82 @@
 import {ApiError, fetchContributionDetails, fetchGridData} from './api';
 import {refreshBranding} from './branding';
 import {
+  getDetails,
   getEvent,
   getEventDays,
   listEvents,
+  pruneDays,
   putDay,
   putDetails,
   putEvent,
   putProbe,
+  StoredDay,
   StoredEvent,
 } from './db';
+import {todayIso} from './format';
 import {syncSponsors} from './sponsors';
 import {bump, setSyncStatus} from './store';
 
-/** Fetch one day and store it. Returns true when the payload actually changed. */
-async function syncDay(eventId: number, day: string, etag: string | null): Promise<boolean> {
-  const result = await fetchGridData(eventId, day, etag);
+/**
+ * How long a details record stays fresh enough to skip re-downloading.
+ *
+ * The abstracts export is the heaviest fetch the app makes and abstracts barely
+ * change once an event is underway, so an unchanged schedule within this window
+ * keeps the stored copy. Any day changing refetches regardless — a moved talk
+ * is the moment its abstract is most likely to have been edited too.
+ */
+const DETAILS_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+/** How often an event whose last day has passed is still worth re-checking. */
+const FINISHED_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Fetch one day and store it. Returns true when the payload actually changed.
+ *
+ * A null `day` asks for the server's default day. The record is keyed on the
+ * day the *answer* names either way — the one fact about which day this is
+ * that cannot be stale.
+ */
+async function syncDay(
+  eventId: number,
+  day: string | null,
+  cached: StoredDay | undefined
+): Promise<boolean> {
+  const result = await fetchGridData(eventId, day, cached?.etag ?? null);
   if (result.notModified || !result.payload) {
     return false;
   }
+  const changed = dayChanged(cached, result.payload);
   await putDay({
-    key: `${eventId}|${day}`,
+    key: `${eventId}|${result.payload.day}`,
     eventId,
-    day,
+    day: result.payload.day,
     payload: result.payload,
     etag: result.etag,
     fetchedAt: Date.now(),
   });
-  return true;
+  return changed;
 }
+
+/**
+ * Whether a freshly fetched payload differs from the stored one — by value,
+ * because the server does not send ETags yet, so today every answer is a 200
+ * and "not a 304" would call every refresh a change. Once ETags exist the 304
+ * path above short-circuits this and the comparison stays as the fallback.
+ */
+function dayChanged(cached: StoredDay | undefined, payload: StoredDay['payload']): boolean {
+  return !cached || JSON.stringify(cached.payload) !== JSON.stringify(payload);
+}
+
+/**
+ * One promise per event id, so overlapping refreshes collapse into one run.
+ *
+ * `syncEvent` is reachable from startup, pull-to-refresh, several buttons and
+ * `addEvent` — overlap is normal, not a corner case. Without this guard the
+ * failing run's catch could write its stale snapshot over the succeeding run's
+ * fresh one, and both would download every day twice over a struggling link.
+ */
+const inFlight = new Map<number, Promise<void>>();
 
 /**
  * Refresh every day of an event.
@@ -50,7 +98,17 @@ async function syncDay(eventId: number, day: string, etag: string | null): Promi
  * most a handful of requests, and a phone on conference wifi does better with
  * one request at a time than with five competing for a bad connection.
  */
-export async function syncEvent(eventId: number): Promise<void> {
+export function syncEvent(eventId: number): Promise<void> {
+  const running = inFlight.get(eventId);
+  if (running) {
+    return running;
+  }
+  const task = doSyncEvent(eventId).finally(() => inFlight.delete(eventId));
+  inFlight.set(eventId, task);
+  return task;
+}
+
+async function doSyncEvent(eventId: number): Promise<void> {
   const event = await getEvent(eventId);
   if (!event) {
     return;
@@ -58,13 +116,17 @@ export async function syncEvent(eventId: number): Promise<void> {
   setSyncStatus(eventId, {phase: 'syncing', error: null});
   try {
     const cached = new Map((await getEventDays(eventId)).map(d => [d.day, d]));
-    // Re-read the day list from the server each time: days get added to an
-    // event while it is running, and a cached day list would never notice.
-    const first = await fetchGridData(eventId, event.days[0] ?? null, null);
+    // Ask for the server's default day, never a cached one: days get added and
+    // *removed* while an event runs, and asking for a day the event no longer
+    // has is a 400 — which would make every refresh fail forever, since the
+    // day list is only corrected by a refresh that succeeds. The reply carries
+    // the current day list, which is exactly what this first call is for.
+    const first = await fetchGridData(eventId, null, null);
     if (!first.payload) {
       throw new ApiError('contract', 'Empty response');
     }
     const days = first.payload.event_days;
+    let changed = dayChanged(cached.get(first.payload.day), first.payload);
     await putDay({
       key: `${eventId}|${first.payload.day}`,
       eventId,
@@ -78,8 +140,23 @@ export async function syncEvent(eventId: number): Promise<void> {
       if (day === first.payload.day) {
         continue;
       }
-      await syncDay(eventId, day, cached.get(day)?.etag ?? null);
+      try {
+        changed = (await syncDay(eventId, day, cached.get(day))) || changed;
+      } catch (error) {
+        // A 400 for a specific day means the dates moved between the first
+        // fetch and this one. Ask once more with no day — the server's answer
+        // is always valid — rather than record a failure over a day that no
+        // longer exists; the next refresh starts from the corrected list.
+        if (!(error instanceof ApiError && error.status === 400)) {
+          throw error;
+        }
+        changed = (await syncDay(eventId, null, undefined)) || changed;
+      }
     }
+
+    // The server's list is authoritative in both directions: a cached day it
+    // no longer names is a day whose talks no longer exist.
+    await pruneDays(eventId, days);
 
     await putEvent({
       ...event,
@@ -92,7 +169,12 @@ export async function syncEvent(eventId: number): Promise<void> {
 
     // Abstracts come from a different endpoint and are a bonus, not a
     // requirement: a failure here must not mark the schedule as unsynced.
-    await syncDetails(eventId);
+    // They are also the biggest download of the lot, so an unchanged schedule
+    // with a reasonably fresh stored copy keeps it instead of re-fetching.
+    const details = await getDetails(eventId);
+    if (changed || !details || Date.now() - details.fetchedAt > DETAILS_MAX_AGE_MS) {
+      await syncDetails(eventId);
+    }
 
     // Sponsors come from a second plugin that most events will not have. Same
     // rule, and `syncSponsors` never throws in the first place.
@@ -104,11 +186,14 @@ export async function syncEvent(eventId: number): Promise<void> {
       error instanceof ApiError ? error : new ApiError('server', 'Could not refresh');
     // A failed refresh must never destroy the cached copy — being offline at a
     // conference is normal, and the schedule from ten minutes ago is far more
-    // useful than an error screen.
-    await putEvent({...event, lastError: apiError.kind});
+    // useful than an error screen. Re-read before writing: the snapshot from
+    // the top of this run predates everything that happened during it, and
+    // writing it back wholesale would revert another writer's work.
+    const latest = (await getEvent(eventId)) ?? event;
+    await putEvent({...latest, lastError: apiError.kind});
     setSyncStatus(eventId, {phase: 'error', error: apiError});
   }
-  bump();
+  bump('events', 'days', 'details', 'sponsors');
 }
 
 /**
@@ -205,15 +290,37 @@ export async function addEvent(eventId: number): Promise<StoredEvent> {
     etag: result.etag,
     fetchedAt: Date.now(),
   });
-  bump();
+  bump('events', 'days');
 
   // The remaining days can arrive after the UI has already shown the first one.
   void syncEvent(eventId);
   return event;
 }
 
+/**
+ * Whether a bulk refresh can leave this event alone: its last day has passed
+ * and a sync succeeded recently enough. A finished conference still gets an
+ * occasional look — organisers do tidy things up afterwards — but not a full
+ * download on every app start. The Refresh control on the event itself calls
+ * `syncEvent` directly and is never skipped.
+ */
+function restingQuietly(event: StoredEvent): boolean {
+  const lastDay = event.days[event.days.length - 1];
+  if (!lastDay || lastDay >= todayIso()) {
+    return false;
+  }
+  if (event.lastError !== null) {
+    // A failed refresh is not a resting state; the next pass should retry it.
+    return false;
+  }
+  return event.lastSyncAt !== null && Date.now() - event.lastSyncAt < FINISHED_MAX_AGE_MS;
+}
+
 export async function syncAll(): Promise<void> {
   for (const event of await listEvents()) {
+    if (restingQuietly(event)) {
+      continue;
+    }
     await syncEvent(event.id);
   }
 }

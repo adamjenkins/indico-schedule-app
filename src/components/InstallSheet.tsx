@@ -1,7 +1,8 @@
 import {useEffect, useState} from 'react';
 
-import {detectPlatform, dismiss, getInstallState, promptInstall} from '../install';
+import {detectPlatform, dismiss, promptInstall} from '../install';
 import {IconBolt, IconFullscreen, IconStar} from './Icons';
+import {useInstallState} from './InstallCard';
 import {Sheet} from './Sheet';
 
 /**
@@ -27,7 +28,11 @@ const DELAY_MS = 6000;
 
 export function InstallSheet() {
   const [open, setOpen] = useState(false);
-  const state = getInstallState();
+  // Subscribed, not sampled: on Android Chrome `beforeinstallprompt` lands
+  // after this mounts, and this sheet is one-shot — a snapshot taken too early
+  // would show "Not now" and nothing else on the one platform with a real
+  // install dialog, then never return.
+  const state = useInstallState();
   const platform = detectPlatform();
 
   useEffect(() => {

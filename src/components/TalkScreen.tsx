@@ -24,7 +24,7 @@ export function TalkScreen({
   contributionId: number;
 }) {
   const {data: days, loading} = useEventDays(eventId);
-  const {data: details} = useStored(() => getDetails(eventId), [eventId]);
+  const {data: details} = useStored(() => getDetails(eventId), [eventId], ['details']);
   const starred = useStarSet(eventId);
 
   if (loading && !days) {
@@ -124,7 +124,7 @@ export function TalkScreen({
           aria-pressed={isStarred}
           onClick={async () => {
             await setStar(eventId, contribution.id, !isStarred);
-            bump();
+            bump('stars');
           }}
         >
           {isStarred ? '★ In my agenda' : '☆ Add to my agenda'}

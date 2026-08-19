@@ -1,4 +1,4 @@
-import {useEffect, useLayoutEffect, useRef, useState} from 'react';
+import {useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore} from 'react';
 
 import {AgendaScreen} from './components/AgendaScreen';
 import {EventsScreen} from './components/EventsScreen';
@@ -8,12 +8,13 @@ import {PullToRefresh} from './components/PullToRefresh';
 import {ScheduleScreen} from './components/ScheduleScreen';
 import {SearchScreen} from './components/SearchScreen';
 import {SettingsScreen} from './components/SettingsScreen';
-import {EmptyState} from './components/States';
+import {Banner, EmptyState} from './components/States';
 import {TabBar} from './components/TabBar';
 import {TalkScreen} from './components/TalkScreen';
 import {useEventRecord, useEvents, useOnline} from './hooks';
 import {BASE, goBack, navigate, Route, useRoute} from './router';
 import {syncAll, syncEvent} from './sync';
+import {isUpdateReady, subscribeUpdate} from './update';
 
 /** Remembered so the Schedule tab has somewhere to go from anywhere in the app. */
 const LAST_EVENT_KEY = 'indico-schedule:last-event';
@@ -110,6 +111,7 @@ export function App() {
   return (
     <div className="app">
       <AppBar route={route} online={online} />
+      <UpdateBanner />
       <main className="main" ref={mainRef}>
         <PullToRefresh onRefresh={refresh} scrollRef={mainRef}>
           <div key={scrollKey} className={`screen ${direction}`}>
@@ -122,6 +124,26 @@ export function App() {
         scheduleHref={scheduleEventId === null ? null : `event/${scheduleEventId}`}
       />
       <InstallSheet />
+    </div>
+  );
+}
+
+/**
+ * The one-line answer to "why does the app look the same after a deploy". The
+ * new worker has already installed and — via `skipWaiting()`/`clients.claim()`
+ * in sw.js — owns the cache, but the JS on screen is still the old build, so
+ * one reload is genuinely all it takes.
+ */
+function UpdateBanner() {
+  const ready = useSyncExternalStore(subscribeUpdate, isUpdateReady, isUpdateReady);
+  if (!ready) {
+    return null;
+  }
+  return (
+    <div className="update-note">
+      <Banner tone="info" action={{label: 'Reload', onClick: () => window.location.reload()}}>
+        A new version is ready.
+      </Banner>
     </div>
   );
 }

@@ -21,7 +21,7 @@ import {SponsorEntry, SponsorTier} from '../types';
  * independently of the printed page.
  */
 export function Sponsors({eventId, position}: {eventId: number; position: 'above' | 'below'}) {
-  const {data: stored} = useStored(() => getSponsors(eventId), [eventId]);
+  const {data: stored} = useStored(() => getSponsors(eventId), [eventId], ['sponsors']);
 
   const urls = useObjectUrls(stored?.logos);
   const byTier = useMemo(() => {

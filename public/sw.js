@@ -25,7 +25,12 @@ self.addEventListener('install', event => {
       // adding a file cannot silently leave it out of the offline bundle.
       const response = await fetch(`${BASE}asset-manifest.json`, {cache: 'no-store'});
       const {files} = await response.json();
-      await cache.addAll([SHELL, ...files]);
+      // `cache: 'reload'` bypasses the HTTP cache. The shell URL is the one
+      // entry that is not content-hashed, and precaching a heuristically-fresh
+      // stale copy of it would pin this cache to assets the deploy that
+      // triggered this install has already deleted — a blank app that cannot
+      // self-heal, because navigations are answered from this cache.
+      await cache.addAll([SHELL, ...files].map(url => new Request(url, {cache: 'reload'})));
       await self.skipWaiting();
     })()
   );

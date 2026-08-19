@@ -145,7 +145,7 @@ export async function refreshBranding(): Promise<void> {
       fetchedAt: Date.now(),
     };
     await putBranding(branding);
-    bump();
+    bump('branding');
   } catch {
     // Offline, or the home page is not reachable. Nothing to say about it.
   }

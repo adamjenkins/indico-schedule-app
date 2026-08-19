@@ -2,14 +2,14 @@ import {useEffect, useRef, useState} from 'react';
 
 import {removeEvent, StoredEvent} from '../db';
 import {formatAge, formatDay} from '../format';
-import {useEvents, useTicker} from '../hooks';
+import {useEvents, useSyncStatus, useTicker} from '../hooks';
 import {navigate} from '../router';
-import {bump, getSyncStatus} from '../store';
+import {bump} from '../store';
 import {syncEvent} from '../sync';
 import {AddEventSheet} from './AddEventSheet';
 import {InstallCard} from './InstallCard';
 import {SiteLogo} from './SiteLogo';
-import {EmptyState, Spinner} from './States';
+import {EmptyState, ErrorState, Spinner, STORAGE_ERROR} from './States';
 
 /**
  * The library: which events this device follows.
@@ -19,7 +19,7 @@ import {EmptyState, Spinner} from './States';
  * talking to.
  */
 export function EventsScreen() {
-  const {data: events, loading} = useEvents();
+  const {data: events, loading, error} = useEvents();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(false);
 
@@ -27,6 +27,12 @@ export function EventsScreen() {
 
   if (loading && !events) {
     return <Spinner />;
+  }
+
+  // A read that *failed* must not fall through to "No events yet" below — that
+  // message invites re-adding everything into storage that is refusing reads.
+  if (error) {
+    return <ErrorState error={STORAGE_ERROR} />;
   }
 
   const list = events ?? [];
@@ -97,7 +103,7 @@ function EventCard({
   editing: boolean;
   onRemove: () => void;
 }) {
-  const status = getSyncStatus(event.id);
+  const status = useSyncStatus(event.id);
   const failed = status.phase === 'error' || event.lastError !== null;
   const stale = event.lastSyncAt !== null && Date.now() - event.lastSyncAt > 60 * 60 * 1000;
 

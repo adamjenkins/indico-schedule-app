@@ -10,6 +10,16 @@ import {ReactNode} from 'react';
 
 import {ApiError, loginUrl} from '../api';
 
+/**
+ * The one storage failure, shared by every screen that reads the database.
+ * A hook rejection carries whatever IndexedDB threw, which is unprintable;
+ * these are the words that should reach the screen instead.
+ */
+export const STORAGE_ERROR = new ApiError(
+  'storage',
+  'This device is not letting the app save data'
+);
+
 export function Spinner() {
   return <div className="spinner" role="status" aria-label="Loading" />;
 }
@@ -98,6 +108,23 @@ export function ErrorState({
       <EmptyState glyph="🗓" title="No schedule set up">
         This event exists, but nobody has configured a block schedule for it — so there is nothing
         for this app to show. It will appear here once the organisers set one up.
+      </EmptyState>
+    );
+  }
+
+  if (error.kind === 'storage') {
+    // Not a network fault at all: IndexedDB refused. Naming the cause matters,
+    // because the empty states this replaces ("No events yet") would invite the
+    // user to re-add everything into a store that cannot hold it.
+    return (
+      <EmptyState
+        glyph="⚠️"
+        title="This device is not letting the app save data"
+        action={onRetry ? <button className="btn ghost" onClick={onRetry}>Try again</button> : undefined}
+      >
+        The app keeps schedules in this browser&rsquo;s storage, and the browser refused to read
+        it. Private browsing, Lockdown Mode and a full disk can all do this. Nothing is lost on
+        the server.
       </EmptyState>
     );
   }

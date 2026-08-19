@@ -6,7 +6,7 @@
  * notice and re-read. Nothing renders straight from a fetch, which is what
  * makes "offline" an ordinary state rather than a special case.
  */
-import {useEffect, useState, useSyncExternalStore} from 'react';
+import {useEffect, useMemo, useState, useSyncExternalStore} from 'react';
 
 import {objectUrlFor} from './blobUrls';
 import {
@@ -19,30 +19,53 @@ import {
   StoredEvent,
   StoredStar,
 } from './db';
-import {getRevision, subscribe} from './store';
+import {Channel, getRevision, getSyncStatus, subscribe, SyncStatus} from './store';
 
-export function useRevision(): number {
-  return useSyncExternalStore(subscribe, getRevision);
+/** The combined revision of the named channels; every channel when unnamed. */
+export function useRevision(channels?: readonly Channel[]): number {
+  return useSyncExternalStore(subscribe, () => getRevision(channels));
+}
+
+/** An event's sync status, re-rendering when any status changes. */
+export function useSyncStatus(eventId: number): SyncStatus {
+  return useSyncExternalStore(subscribe, () => getSyncStatus(eventId));
 }
 
 export interface Loaded<T> {
   data: T | null;
   loading: boolean;
+  /**
+   * Set when the read itself failed — storage refusing to answer, not data
+   * being absent. The two must stay distinguishable: "you have no events" and
+   * "this device will not let the app read its events" call for opposite
+   * advice, and collapsing the second into the first tells the user to re-add
+   * everything into a store that is broken.
+   */
+  error: unknown;
 }
 
-/** Run an async read, and run it again whenever stored data changes. */
-export function useStored<T>(load: () => Promise<T>, deps: unknown[]): Loaded<T> {
-  const revision = useRevision();
-  const [state, setState] = useState<Loaded<T>>({data: null, loading: true});
+/**
+ * Run an async read, and run it again whenever the stored data it reads from
+ * changes. `channels` names which stores those are; a hook that leaves it off
+ * re-reads on *every* change, so naming them is what keeps a star tap from
+ * re-reading megabytes of cached days it never touches.
+ */
+export function useStored<T>(
+  load: () => Promise<T>,
+  deps: unknown[],
+  channels?: readonly Channel[]
+): Loaded<T> {
+  const revision = useRevision(channels);
+  const [state, setState] = useState<Loaded<T>>({data: null, loading: true, error: null});
 
   useEffect(() => {
     let live = true;
     // Deliberately not clearing `data` first: a refresh should update the
     // screen in place, not blank it out and flash a spinner.
-    setState(previous => ({data: previous.data, loading: true}));
+    setState(previous => ({data: previous.data, loading: true, error: previous.error}));
     load().then(
-      data => live && setState({data, loading: false}),
-      () => live && setState({data: null, loading: false})
+      data => live && setState({data, loading: false, error: null}),
+      (error: unknown) => live && setState({data: null, loading: false, error})
     );
     return () => {
       live = false;
@@ -54,25 +77,27 @@ export function useStored<T>(load: () => Promise<T>, deps: unknown[]): Loaded<T>
 }
 
 export function useEvents(): Loaded<StoredEvent[]> {
-  return useStored(() => listEvents(), []);
+  return useStored(() => listEvents(), [], ['events']);
 }
 
 export function useEventRecord(eventId: number): Loaded<StoredEvent | undefined> {
-  return useStored(() => getEvent(eventId), [eventId]);
+  return useStored(() => getEvent(eventId), [eventId], ['events']);
 }
 
 export function useEventDays(eventId: number): Loaded<StoredDay[]> {
-  return useStored(() => getEventDays(eventId), [eventId]);
+  return useStored(() => getEventDays(eventId), [eventId], ['days']);
 }
 
 export function useStars(eventId?: number): Loaded<StoredStar[]> {
-  return useStored(() => listStars(eventId), [eventId]);
+  return useStored(() => listStars(eventId), [eventId], ['stars']);
 }
 
 /** Starred contribution ids for one event, as a set for cheap lookups. */
 export function useStarSet(eventId?: number): Set<number> {
   const {data} = useStars(eventId);
-  return new Set((data ?? []).map(star => star.contributionId));
+  // Memoised so an unrelated re-render does not hand every memoised row a
+  // fresh Set and defeat its bail-out.
+  return useMemo(() => new Set((data ?? []).map(star => star.contributionId)), [data]);
 }
 
 /** Whether the browser currently believes it has a connection. */
@@ -124,22 +149,27 @@ export const markKey = (eventId: number, contributionId: number) => `${eventId}|
  * sponsor is listed.
  */
 export function useSponsorMarks(): Map<string, SponsorMark> {
-  const {data: records} = useStored(() => listSponsors(), []);
-  const marks = new Map<string, SponsorMark>();
-  for (const record of records ?? []) {
-    for (const sponsor of record.payload.sponsors) {
-      const source = sponsor.logo_url ?? sponsor.square_logo_url;
-      const blob = source ? record.logos[source] : undefined;
-      if (!source || !blob) {
-        continue;
-      }
-      for (const contributionId of sponsor.contribution_ids ?? []) {
-        const key = markKey(record.eventId, contributionId);
-        if (!marks.has(key)) {
-          marks.set(key, {url: objectUrlFor(source, blob), name: sponsor.name});
+  const {data: records} = useStored(() => listSponsors(), [], ['sponsors']);
+  // Memoised on the stored records: the map and the mark objects inside it keep
+  // their identity across unrelated re-renders, which is what lets a memoised
+  // row treat its `sponsor` prop as unchanged.
+  return useMemo(() => {
+    const marks = new Map<string, SponsorMark>();
+    for (const record of records ?? []) {
+      for (const sponsor of record.payload.sponsors) {
+        const source = sponsor.logo_url ?? sponsor.square_logo_url;
+        const blob = source ? record.logos[source] : undefined;
+        if (!source || !blob) {
+          continue;
+        }
+        for (const contributionId of sponsor.contribution_ids ?? []) {
+          const key = markKey(record.eventId, contributionId);
+          if (!marks.has(key)) {
+            marks.set(key, {url: objectUrlFor(source, blob), name: sponsor.name});
+          }
         }
       }
     }
-  }
-  return marks;
+    return marks;
+  }, [records]);
 }

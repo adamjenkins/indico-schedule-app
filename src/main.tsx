@@ -4,6 +4,7 @@ import {createRoot} from 'react-dom/client';
 import {App} from './App';
 import './styles.css';
 import {runStartupSync} from './sync';
+import {watchForUpdates} from './update';
 
 const container = document.getElementById('root');
 if (!container) {
@@ -31,9 +32,14 @@ runStartupSync();
  */
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, {
-      scope: import.meta.env.BASE_URL,
-    });
+    // `updatefound` feeds the "new version is ready" banner. A failed
+    // registration is not sticky — the browser re-fetches sw.js and retries on
+    // the next navigation — so the rejection needs no handling beyond silence.
+    navigator.serviceWorker
+      .register(`${import.meta.env.BASE_URL}sw.js`, {
+        scope: import.meta.env.BASE_URL,
+      })
+      .then(watchForUpdates, () => undefined);
   });
 } else if (window.isSecureContext === false) {
   console.warn(
