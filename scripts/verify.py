@@ -785,34 +785,221 @@ def main() -> int:
             if not attached:
                 print('  --   no sponsor is attached to a contribution; skipping the mark checks')
             else:
+                # How wide a mark is drawn, and which surfaces carry one at all,
+                # are the event manager's settings. Read them and assert the app
+                # followed them, rather than assuming one arrangement -- which
+                # would pass whatever the plugin said and test nothing.
+                #
+                # A payload with no `contribution_marks` key comes from a plugin
+                # older than the settings and means "unchanged": rows keep the
+                # fixed mark the stylesheet has always given them, and the talk
+                # screen shows no logo at all, because that surface never
+                # existed before the setting did. Both branches below say so.
+                marks_config = page.evaluate(
+                    'async (id) => ((await (await fetch(`/event/${id}/sponsors/data`)).json())'
+                    '.contribution_marks || null)',
+                    args.event,
+                )
+                on_rows = marks_config['on_rows'] if marks_config else True
+                on_detail = bool(marks_config and marks_config['on_detail'])
+                length = f'{marks_config["width"]}{marks_config["unit"]}' if marks_config else None
+
                 page.goto(f'{app}event/{args.event}', wait_until='networkidle')
                 page.wait_for_selector('.talk')
-                page.locator('.talk-sponsor img').first.scroll_into_view_if_needed()
-                page.wait_for_function(
-                    "() => [...document.querySelectorAll('.talk-sponsor img')]"
-                    '.some(i => i.complete && i.naturalWidth > 0)',
-                    timeout=8000,
+                if not on_rows:
+                    # Wait for the sponsors block first: it is drawn from the
+                    # same stored record as the marks, so its presence proves
+                    # the record has reached the UI and an empty count means the
+                    # switch, not a race against IndexedDB.
+                    page.wait_for_selector('.sponsors', timeout=10000)
+                    seen = page.locator('.talk-sponsor').count()
+                    check('no row carries a mark when row marks are switched off', seen == 0,
+                          f'{seen} marks on a schedule with {len(set(attached))} sponsored talks')
+                else:
+                    page.locator('.talk-sponsor img').first.scroll_into_view_if_needed()
+                    page.wait_for_function(
+                        "() => [...document.querySelectorAll('.talk-sponsor img')]"
+                        '.some(i => i.complete && i.naturalWidth > 0)',
+                        timeout=8000,
+                    )
+                    marks = page.evaluate(
+                        """() => [...document.querySelectorAll('.talk')].map(talk => {
+                            const img = talk.querySelector('.talk-sponsor img');
+                            if (!img) { return null; }
+                            const row = talk.getBoundingClientRect(), mark = img.getBoundingClientRect();
+                            return {
+                                blob: img.src.startsWith('blob:'),
+                                // Lower right: past the middle of the row both ways,
+                                // and not hanging outside it.
+                                right: mark.right > row.left + row.width / 2,
+                                lower: mark.bottom > row.top + row.height / 2,
+                                inside: mark.right <= row.right + 1 && mark.bottom <= row.bottom + 1,
+                            };
+                        }).filter(Boolean)"""
+                    )
+                    check('exactly the attached talks carry a sponsor mark',
+                          len(marks) == len(set(attached)), f'{len(marks)} marked, {len(set(attached))} attached')
+                    check('the mark comes from a stored copy', all(m['blob'] for m in marks), str(marks[:1]))
+                    check('and sits in the lower right of its row',
+                          all(m['right'] and m['lower'] and m['inside'] for m in marks), str(marks[:1]))
+
+                    if not marks_config:
+                        fixed = page.evaluate(
+                            """() => {
+                                const r = document.querySelector('.talk-sponsor').getBoundingClientRect();
+                                return [Math.round(r.width), Math.round(r.height)];
+                            }"""
+                        )
+                        check('an event whose payload predates the setting keeps the mark it always had',
+                              fixed == [40, 20], f'{fixed[0]}x{fixed[1]}px, 40x20 before the setting existed')
+                    else:
+                        sized = page.evaluate(
+                            """(length) => {
+                                const mark = document.querySelector('.talk .talk-sponsor');
+                                if (!mark) { return null; }
+                                const column = mark.closest('.talk-side');
+                                const row = column.closest('.talk');
+                                // What the configured length is worth on this very
+                                // row, measured by handing it back to the browser
+                                // on a hidden twin rather than reimplementing `%`,
+                                // `em` and `vw` here -- and a twin of the whole
+                                // row, not of the column alone, because the column
+                                // is a flex item and a third one squeezed in beside
+                                // the real two would be shrunk to fit.
+                                const twin = row.cloneNode(true);
+                                twin.style.visibility = 'hidden';
+                                // The twin's column is classed from scratch
+                                // rather than inherited from the real one, so a
+                                // mark that never picked up the class -- and so
+                                // never picked up the cap that keeps a large
+                                // setting off the title -- shows up as a
+                                // difference here instead of being copied into
+                                // the yardstick.
+                                const twinColumn = twin.querySelector('.talk-side');
+                                twinColumn.className = 'talk-side sized-mark';
+                                twinColumn.style.width = length;
+                                row.after(twin);
+                                const want = twinColumn.getBoundingClientRect().width;
+                                twin.remove();
+                                return {
+                                    inline: column.style.width,
+                                    column: column.getBoundingClientRect().width,
+                                    want,
+                                    logo: mark.getBoundingClientRect().width,
+                                };
+                            }""",
+                            length,
+                        )
+                        check('a row mark takes the configured width',
+                              bool(sized) and sized['inline'] == length
+                              and abs(sized['column'] - sized['want']) <= 1,
+                              f'{length} configured as {sized["inline"]!r}, column {sized["column"]:.1f}px '
+                              f'against {sized["want"]:.1f}px expected' if sized else 'no mark found')
+                        # The width is set on the column so a percentage has a
+                        # parent of real width to resolve against; the mark only
+                        # obeys it if it then fills that column, which it did not
+                        # while the old fixed 40px was still winning.
+                        check('and the logo fills the column it was given',
+                              bool(sized) and abs(sized['logo'] - sized['column']) <= 1,
+                              f'logo {sized["logo"]:.1f}px in a {sized["column"]:.1f}px column'
+                              if sized else 'no mark found')
+
+                # The talk's own screen, which has a switch of its own. Reached
+                # by its route rather than by tapping a marked row: the row mark
+                # is absent in half the arrangements checked here, and the screen
+                # has to be reachable in all of them.
+                talk = page.evaluate(
+                    """async ({eventId, ids}) => {
+                        const req = indexedDB.open('indico-schedule');
+                        const db = await new Promise(res => { req.onsuccess = () => res(req.result); });
+                        const days = await new Promise(res => {
+                            const tx = db.transaction('days', 'readonly');
+                            const r = tx.objectStore('days').getAll();
+                            r.onsuccess = () => res(r.result);
+                        });
+                        for (const stored of days.filter(d => d.eventId === eventId)) {
+                            const hit = stored.payload.scheduled_contributions.find(c => ids.includes(c.id));
+                            if (hit) { return {day: stored.day, id: hit.id, title: hit.title}; }
+                        }
+                        return null;
+                    }""",
+                    {'eventId': args.event, 'ids': sorted(set(attached))},
                 )
-                marks = page.evaluate(
-                    """() => [...document.querySelectorAll('.talk')].map(talk => {
-                        const img = talk.querySelector('.talk-sponsor img');
-                        if (!img) { return null; }
-                        const row = talk.getBoundingClientRect(), mark = img.getBoundingClientRect();
-                        return {
-                            blob: img.src.startsWith('blob:'),
-                            // Lower right: past the middle of the row both ways,
-                            // and not hanging outside it.
-                            right: mark.right > row.left + row.width / 2,
-                            lower: mark.bottom > row.top + row.height / 2,
-                            inside: mark.right <= row.right + 1 && mark.bottom <= row.bottom + 1,
-                        };
-                    }).filter(Boolean)"""
-                )
-                check('exactly the attached talks carry a sponsor mark',
-                      len(marks) == len(set(attached)), f'{len(marks)} marked, {len(set(attached))} attached')
-                check('the mark comes from a stored copy', all(m['blob'] for m in marks), str(marks[:1]))
-                check('and sits in the lower right of its row',
-                      all(m['right'] and m['lower'] and m['inside'] for m in marks), str(marks[:1]))
+                if not talk:
+                    print('  --   no sponsored talk is on the downloaded schedule; skipping the detail checks')
+                else:
+                    page.goto(f'{app}event/{args.event}/{talk["day"]}/talk/{talk["id"]}',
+                              wait_until='networkidle')
+                    page.wait_for_selector('.detail')
+                    if not on_detail:
+                        # Give the stored record the same moment to arrive as
+                        # the schedule gets above, so "nothing here" is the
+                        # setting speaking rather than a screen caught mid-load.
+                        page.wait_for_timeout(800)
+                        seen = page.locator('.detail-sponsor').count()
+                        check('the talk screen shows no sponsor logo when '
+                              + ('that switch is off' if marks_config else 'the payload predates the setting'),
+                              seen == 0, f'{seen} logos on {talk["title"]!r}')
+                    else:
+                        # The logo becomes an object URL in an effect that runs
+                        # after the stored record loads, so wait for it to decode
+                        # rather than sampling once and calling it missing.
+                        loaded = True
+                        try:
+                            page.wait_for_function(
+                                "() => { const img = document.querySelector('.detail-sponsor img');"
+                                ' return img && img.complete && img.naturalWidth > 0; }',
+                                timeout=8000,
+                            )
+                        except Exception:
+                            loaded = False
+                        placed = page.evaluate(
+                            """(length) => {
+                                const box = document.querySelector('.detail-sponsor');
+                                if (!box) { return null; }
+                                // The row's twin trick again, and for the same
+                                // reason: `20%` here means a fifth of the column
+                                // the abstract is set in, and only the browser
+                                // knows what that is in pixels.
+                                const twin = box.cloneNode(true);
+                                twin.style.visibility = 'hidden';
+                                twin.style.width = length;
+                                box.after(twin);
+                                const want = twin.getBoundingClientRect().width;
+                                twin.remove();
+                                const rect = box.getBoundingClientRect();
+                                const abstract = document.querySelector('.abstract, .abstract-missing');
+                                const actions = document.querySelector('.detail .row');
+                                return {
+                                    blob: box.querySelector('img').src.startsWith('blob:'),
+                                    width: rect.width,
+                                    want,
+                                    anchor: abstract ? abstract.className : null,
+                                    below: abstract
+                                        ? Math.round(rect.top - abstract.getBoundingClientRect().bottom) : null,
+                                    aboveActions: actions
+                                        ? Math.round(actions.getBoundingClientRect().top - rect.bottom) : null,
+                                };
+                            }""",
+                            length,
+                        )
+                        check('the talk screen shows a sponsor logo, from a stored copy',
+                              loaded and bool(placed) and placed['blob'],
+                              f'{talk["title"]!r}: {placed}')
+                        if placed:
+                            # Under the abstract, not merely somewhere on the
+                            # screen: above it would read as a banner over the
+                            # talk, and below the buttons as an afterthought.
+                            check('and it sits under the abstract, above the agenda button',
+                                  placed['below'] is not None and placed['below'] >= -1
+                                  and (placed['aboveActions'] is None or placed['aboveActions'] >= -1),
+                                  f'{placed["below"]}px below .{placed["anchor"]}, '
+                                  f'{placed["aboveActions"]}px above the buttons'
+                                  if placed['below'] is not None else 'this talk screen has no abstract block')
+                            check('and the detail logo takes the configured width',
+                                  abs(placed['width'] - placed['want']) <= 1,
+                                  f'{length} configured, {placed["width"]:.1f}px drawn '
+                                  f'against {placed["want"]:.1f}px expected')
 
             check('sponsors and their logos are stored on the device',
                   bool(stored) and stored[0] >= 1 and stored[1] >= 1, str(stored))

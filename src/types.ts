@@ -188,6 +188,38 @@ export interface SponsorTier {
   inline?: boolean;
 }
 
+/**
+ * How a sponsor's mark is drawn on the contributions it is attached to.
+ *
+ * Optional, and the absence of the key is not the same as the defaults written
+ * below: a payload from a plugin older than this setting carries no such key at
+ * all, and that has to keep meaning what it always meant — a mark on every talk
+ * row at a fixed 40x20px, and nothing on a talk's own screen. Only an event
+ * whose server really sent the key gets a configured size or has its marks
+ * switched off. Every reader here is written that way round.
+ *
+ * The plugin's third switch, `on_web_detail`, is deliberately not part of this
+ * contract: it governs the Indico website's own contribution page, which this
+ * app never draws.
+ */
+export interface SponsorContributionMarks {
+  /** How wide the mark is drawn, in `unit`. */
+  width: number;
+  /**
+   * The CSS length unit the width is in — `%`, `px`, `em`, `rem`, `vh` or `vw`.
+   * Typed as a plain string rather than a union of those six: the allow-list
+   * lives on the server, which validates and clamps before sending, and a union
+   * here would only be a promise this app cannot keep about a payload it did
+   * not write. A unit it does not understand yields a CSS length the browser
+   * drops, which leaves the mark at its stylesheet size rather than broken.
+   */
+  unit: string;
+  /** Mark the talk rows in the schedule, the agenda and search results. */
+  on_rows: boolean;
+  /** Show the sponsor's logo under the abstract on a talk's own screen. */
+  on_detail: boolean;
+}
+
 export interface SponsorsPayload {
   event_id: number;
   event_title: string;
@@ -202,4 +234,7 @@ export interface SponsorsPayload {
   } | null;
   tiers: SponsorTier[];
   sponsors: SponsorEntry[];
+  /** Absent on a payload from a server too old to have the setting — see
+   * `SponsorContributionMarks` for what that absence means. */
+  contribution_marks?: SponsorContributionMarks;
 }

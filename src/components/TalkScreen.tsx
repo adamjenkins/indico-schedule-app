@@ -1,6 +1,6 @@
 import {getDetails, setStar} from '../db';
 import {formatDayLong, formatDuration, formatTimeRange} from '../format';
-import {useEventDays, useStarSet, useStored} from '../hooks';
+import {useEventDays, useSponsorDetailMark, useStarSet, useStored} from '../hooks';
 import {RichText} from '../richtext';
 import {bump} from '../store';
 import {EmptyState, Spinner} from './States';
@@ -26,6 +26,11 @@ export function TalkScreen({
   const {data: days, loading} = useEventDays(eventId);
   const {data: details} = useStored(() => getDetails(eventId), [eventId], ['details']);
   const starred = useStarSet(eventId);
+  // Read before the early returns below, because a hook cannot be skipped. Null
+  // whenever this talk has no sponsor with a stored logo, and null too for an
+  // event whose payload predates the setting or whose manager switched the
+  // detail logo off — this surface only appears when an event asks for it.
+  const sponsor = useSponsorDetailMark(eventId, contributionId);
 
   if (loading && !days) {
     return <Spinner />;
@@ -116,6 +121,17 @@ export function TalkScreen({
           Abstracts have not been downloaded yet — pull down to refresh.
         </p>
       )}
+
+      {/* Under the abstract, at the width the event manager configured. The logo
+          comes from the blob stored on the device, addressed by an object URL —
+          the same rule as every other logo here, and the reason a talk screen
+          still shows it with the phone in flight mode. Not a link: this is a
+          credit on a page about the talk, not an invitation to leave it. */}
+      {sponsor ? (
+        <div className="detail-sponsor" style={{width: `${sponsor.width}${sponsor.unit}`}}>
+          <img src={sponsor.url} alt={`Sponsored by ${sponsor.name}`} title={sponsor.name} />
+        </div>
+      ) : null}
 
       <div className="row" style={{margin: '18px 0 12px'}}>
         <button

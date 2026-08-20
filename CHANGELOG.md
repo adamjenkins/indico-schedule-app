@@ -9,6 +9,18 @@ grouped by the round of work that produced them.
 
 ## [Unreleased]
 
+### Added — sponsor marks (2026-08-20)
+- **The sponsor mark on a talk row takes the width the manager configured**,
+  with a unit, instead of a fixed 40×20px box. The value arrives in the
+  sponsors payload as `contribution_marks`; a payload without that key is an
+  older plugin, and the mark keeps exactly the box it always had rather than
+  inventing a default.
+- **A talk's own screen shows its sponsor's logo under the abstract**, from the
+  stored copy like every other logo here, so it survives a cold offline start.
+- **Both are switchable**, independently, from the plugin's settings — a mark
+  on rows and a logo on talk screens are different intrusions and an organiser
+  may want one without the other.
+
 ### Fixed — update delivery (2026-08-20)
 - **The app now asks whether there is a newer build, instead of waiting to be
   told.** A service worker only re-fetches `sw.js` when something triggers an

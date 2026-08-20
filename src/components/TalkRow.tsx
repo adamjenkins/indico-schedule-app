@@ -2,6 +2,7 @@ import {memo, ReactNode} from 'react';
 
 import {readableTextColor, trackColor} from '../colors';
 import {formatMinutes} from '../format';
+import {SponsorMark} from '../hooks';
 import {BSContribution} from '../types';
 
 /**
@@ -48,7 +49,7 @@ export const TalkRow = memo(function TalkRow({
   /** The manager's colour for this contribution's track, if the payload carried one. */
   trackColor?: string | null;
   /** A sponsor attached to this talk, drawn small in the corner. */
-  sponsor?: {url: string; name: string} | null;
+  sponsor?: SponsorMark | null;
 }) {
   const accent = trackColor(contribution.track_id, chosenTrackColor);
   // Only a real colour gets a coloured pill. The fallback palette already shows on the
@@ -56,6 +57,16 @@ export const TalkRow = memo(function TalkRow({
   const trackPillStyle = chosenTrackColor
     ? {backgroundColor: accent, color: readableTextColor(accent)}
     : undefined;
+
+  // The width the event manager configured for its marks, as a CSS length —
+  // null when the event's payload carried no `contribution_marks` at all, which
+  // is a plugin older than the setting. Then no inline width is written and the
+  // mark keeps the fixed 40x20px the stylesheet has always given it, exactly as
+  // before: the absent key means "unchanged", never "some default".
+  const markWidth =
+    sponsor && sponsor.width != null && sponsor.unit
+      ? `${sponsor.width}${sponsor.unit}`
+      : null;
 
   return (
     <div className={dimmed ? 'talk dim' : 'talk'} style={{borderLeftColor: accent}}>
@@ -81,7 +92,18 @@ export const TalkRow = memo(function TalkRow({
           </span>
         </button>
       </div>
-      <div className="talk-side">
+      {/* The configured width goes on the column, not on the mark inside it: the
+          unit may be `%`, and a percentage resolves against the parent's content
+          box. The column is sized by its own contents, so a percentage there
+          would measure itself and come out arbitrary — the same trap the
+          sponsors block fell into. Against the row, which has a real width, a
+          percentage means what the manager meant by it. The star's own minimum
+          keeps the column from collapsing under a tiny setting, and the
+          stylesheet's max-width keeps a large one off the title. */}
+      <div
+        className={markWidth ? 'talk-side sized-mark' : 'talk-side'}
+        style={markWidth ? {width: markWidth} : undefined}
+      >
       <button
         className={starred ? 'starbtn on' : 'starbtn'}
         aria-pressed={starred}
@@ -94,7 +116,7 @@ export const TalkRow = memo(function TalkRow({
           claim on the row, and never a link -- tapping a talk should open the
           talk, whoever is sponsoring it. */}
       {sponsor ? (
-        <span className="talk-sponsor">
+        <span className={markWidth ? 'talk-sponsor sized' : 'talk-sponsor'}>
           <img src={sponsor.url} alt={`Sponsored by ${sponsor.name}`} title={sponsor.name} loading="lazy" />
         </span>
       ) : null}

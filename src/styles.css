@@ -866,6 +866,30 @@ a {
   font-size: 13.5px;
 }
 
+/* A sponsor's logo under the abstract, at the width its event configured — the
+   inline width is set by the screen, and a percentage there resolves against
+   the detail column, which is the measure the abstract itself is set to. So
+   "20%" means a fifth of the text it sits under, which is what a manager
+   choosing it is looking at.
+
+   Quiet and left-aligned: a credit under the text, not a banner across it. The
+   height is capped in case the artwork is a tall one drawn at a wide setting,
+   and `contain` keeps it from ever being cropped or stretched. */
+.detail-sponsor {
+  margin-top: 16px;
+  max-width: 100%;
+  opacity: 0.9;
+}
+
+.detail-sponsor img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 140px;
+  object-fit: contain;
+  object-position: left center;
+}
+
 /* --- event picker --------------------------------------------------------- */
 
 .crumbs {
@@ -1577,7 +1601,13 @@ mark {
 }
 
 /* A credit, not a claim on the row: small, quiet, and deliberately not a link —
-   tapping a talk should open the talk, whoever is sponsoring it. */
+   tapping a talk should open the talk, whoever is sponsoring it.
+
+   The 40x20 box here is the size the app has drawn since marks existed, and it
+   stays the size for any event whose payload carries no mark settings — a
+   plugin older than them. Those rows must look exactly as they always did, so
+   the default lives in the stylesheet and a configured width overrides it
+   through `.sized` below, rather than the default being invented in the code. */
 .talk-sponsor {
   display: block;
   width: 40px;
@@ -1591,4 +1621,26 @@ mark {
   height: 100%;
   object-fit: contain;
   object-position: right bottom;
+}
+
+/* A configured width is applied to the column rather than to the mark, because
+   it may be a percentage and only the column has a parent of a real width to
+   resolve one against (see TalkRow). The cap is what keeps a manager who types
+   80% from squeezing the talk title into a ribbon; the other end needs no
+   floor, since the star's own 44px minimum already sets the column's. */
+.talk-side.sized-mark {
+  max-width: 40%;
+}
+
+/* Sized, the mark fills that column and its height follows the artwork instead
+   of the old fixed box — capped, so a wide setting cannot make a row taller
+   than the text in it. */
+.talk-sponsor.sized {
+  width: 100%;
+  height: auto;
+}
+
+.talk-sponsor.sized img {
+  height: auto;
+  max-height: 48px;
 }
