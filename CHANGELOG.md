@@ -9,6 +9,33 @@ grouped by the round of work that produced them.
 
 ## [Unreleased]
 
+### Fixed — update delivery (2026-08-20)
+- **The app now asks whether there is a newer build, instead of waiting to be
+  told.** A service worker only re-fetches `sw.js` when something triggers an
+  update check, and the only trigger the app owned was `register()` inside a
+  `load` listener. `load` needs a navigation, and an installed PWA resumed
+  from the app switcher does not navigate — it restores the web view it
+  already had. A phone that was never fully relaunched therefore stayed on
+  whatever build it first installed, for as long as that lasted. The check now
+  also runs whenever the app becomes visible again, throttled to once a minute
+  so that ordinary picking-up-and-putting-down does not hammer the server, and
+  on a back/forward-cache restore, which runs no JS and fires no
+  `visibilitychange` but is just as much a resume.
+- **A build that arrives on resume installs itself silently.** The page
+  reloads on its own, the way a native app would have updated while it was
+  away; the route and the scroll position both survive it. One that arrives
+  mid-session still raises the "A new version is ready" banner instead, since
+  reloading underneath someone reading a talk is worse than being one tap out
+  of date.
+- **The update banner no longer loses the race that made it pointless.** It
+  was raised only from `updatefound`, subscribed after `register()` resolved —
+  but the check the navigation itself triggers can fire that event first, and
+  then nothing was listening and no banner ever appeared. Whatever is already
+  installing or waiting is now picked up at subscribe time, and
+  `controllerchange` — the actual moment a new build takes over a running page,
+  given `skipWaiting()` and `clients.claim()` — is watched as well. The signals
+  are deliberately redundant; the reload and the banner are both idempotent.
+
 ### Fixed — external review round (2026-08-19)
 - **Signed-out requests are recognised as such.** Every request now carries
   `X-Requested-With: XMLHttpRequest`, which is what Indico's error handlers

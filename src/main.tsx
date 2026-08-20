@@ -32,9 +32,11 @@ runStartupSync();
  */
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    // `updatefound` feeds the "new version is ready" banner. A failed
-    // registration is not sticky — the browser re-fetches sw.js and retries on
-    // the next navigation — so the rejection needs no handling beyond silence.
+    // `watchForUpdates` takes it from here: it watches for a new build and
+    // keeps asking for one on every resume, which is the only thing that
+    // reaches a PWA that is never fully relaunched. A failed registration is
+    // not sticky — the browser re-fetches sw.js and retries on the next
+    // navigation — so the rejection needs no handling beyond silence.
     navigator.serviceWorker
       .register(`${import.meta.env.BASE_URL}sw.js`, {
         scope: import.meta.env.BASE_URL,

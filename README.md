@@ -257,7 +257,7 @@ src/
   install.ts      whether it is installed, promptable, or why neither
   probe.ts        which events have a block schedule, asked once and remembered
   branding.ts     the site logo, lifted from Indico's page header and measured
-  update.ts       which build is running, and when a newer one is ready
+  update.ts       which build is running; asks for a newer one on resume
   richtext.tsx    abstracts rendered through an HTML allow-list, never raw
   components/     one file per screen, plus TalkRow and the filter sheet
 public/
